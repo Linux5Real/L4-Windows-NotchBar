@@ -1,0 +1,78 @@
+name: Release
+
+# Pushing a new version (src-tauri/tauri.conf.json) to main publishes a release:
+# signed installer, .sig and latest.json for the in-app updater.
+# Pushes without a version bump only run the check and stop.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      release: ${{ steps.version.outputs.release }}
+      notes: ${{ steps.version.outputs.notes }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(jq -r .version src-tauri/tauri.conf.json)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if gh release view "v$version" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release v$version already exists, nothing to do."
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "release=true" >> "$GITHUB_OUTPUT"
+          # Changes since the previous release tag.
+          previous=$(git tag --list 'v*' --sort=-v:refname | head -n 1)
+          range=${previous:+$previous..HEAD}
+          {
+            echo "notes<<EOF"
+            git log --no-merges --pretty='- %s' $range | grep -v '^- Merge' || true
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: check
+    if: needs.check.outputs.release == 'true'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: npm ci
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+        with:
+          tagName: v__VERSION__
+          releaseName: L4-Notchbar v__VERSION__
+          releaseDraft: false
+          prerelease: false
+          releaseBody: |
+            **Install:** download `L4-Notchbar_${{ needs.check.outputs.version }}_x64-setup.exe` below and run it. No admin rights or developer tools needed.
+            Already installed? The app offers this version under **Settings → General → Updates**.
+
+            Windows SmartScreen may warn because the installer is not code-signed yet: **More info → Run anyway**.
+
+            ### Changes
+            ${{ needs.check.outputs.notes }}

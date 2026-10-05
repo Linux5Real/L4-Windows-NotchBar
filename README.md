@@ -91,13 +91,17 @@ To build a standalone executable:
 npx tauri build --no-bundle   # result: src-tauri/target/release/notch.exe
 ```
 
-Release builds with installer and update signature need the signing key:
+### Releasing
 
-```powershell
-$env:TAURI_SIGNING_PRIVATE_KEY = Get-Content -Raw "$HOME\.tauri\l4-notchbar.key"
-$env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = ""
-npx tauri build
+Releases are built by GitHub Actions (`.github/workflows/release.yml`). Bump the version, commit and push:
+
+```bash
+npm run bump 1.1.0
+git commit -am "release 1.1.0"
+git push
 ```
+
+The workflow builds the signed installer and publishes release `v1.1.0` with the installer, its signature and `latest.json`, which installed apps use to offer the update. Pushes without a version bump don't create a release. The signing key lives in the repository secret `TAURI_SIGNING_PRIVATE_KEY`.
 
 Run Tauri commands from PowerShell. In Git Bash, `/usr/bin/link` shadows the MSVC linker and the build fails.
 

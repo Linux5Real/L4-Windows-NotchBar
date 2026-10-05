@@ -8,6 +8,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "i18n": "node scripts/i18n-check.mjs",
+    "bump": "node scripts/bump.mjs",
     "typecheck": "tsc -b",
     "preview": "vite preview",
     "tauri": "tauri"

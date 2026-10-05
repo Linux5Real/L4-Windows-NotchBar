@@ -6,9 +6,13 @@
 //!   alle APIs — damit zählen auch OpenGL (z. B. Minecraft Java) und Vulkan.
 //! - Ein Frame löst je nach API mehrere dieser Events aus. Deshalb wird pro Event-Art
 //!   getrennt gezählt und die größte Zahl genommen — nie die Summe.
-//! - Echtzeit-ETW braucht Administratorrechte oder die Gruppe "Leistungsprotokollbenutzer".
-//!   Ohne beides liefert `gaming_fps` den Fehler "no-admin"; `fps_unlock` nimmt das Konto
-//!   einmalig in die Gruppe auf (eine UAC-Abfrage, danach nie wieder).
+//! - Echtzeit-ETW braucht Rechte. `fps_unlock` startet die App einmal erhöht (UAC-Abfrage
+//!   als "L4-Notchbar") und gibt dem Konto:
+//!     1. direkte ETW-Rechte auf die eigene Sitzungs-GUID und die drei Provider — wirken
+//!        sofort, ohne Abmelden;
+//!     2. zusätzlich die Gruppe "Leistungsprotokollbenutzer" als Rückfallebene (wirkt erst
+//!        nach der nächsten Anmeldung).
+//!   Ohne Rechte liefert `gaming_fps` "no-admin" und versucht es alle paar Sekunden neu.
 //! - Die Sitzung läuft nur, solange abgefragt wird (`IDLE`), und überlebt sonst einen
 //!   Absturz — deshalb wird eine alte Sitzung gleichen Namens beim Start beendet.
 
@@ -28,6 +32,8 @@ use windows::Win32::System::Diagnostics::Etw::{
 use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowThreadProcessId};
 
 const SESSION: &str = "NotchFps";
+/// Feste GUID der Sitzung: an ihr hängen die ETW-Rechte, die `fps_unlock` vergibt.
+const SESSION_GUID: GUID = GUID::from_u128(0x6f3e2a41_8c5d_4b7e_9a12_4c4e6f746368);
 const DXGI: GUID = GUID::from_u128(0xca11c036_0102_4a2d_a6ad_f03cfed5d3c9);
 const D3D9: GUID = GUID::from_u128(0x783aca0a_790e_4d7f_8451_aa850511c6b9);
 const DXGKRNL: GUID = GUID::from_u128(0x802ec45a_1e99_4b83_9920_87c98277ba9d);
@@ -41,6 +47,8 @@ const KMT_KEYWORD_PRESENT: u64 = 0x800_0000;
 /// Kein Abruf mehr seit so lange → Sitzung beenden.
 const IDLE: Duration = Duration::from_secs(10);
 const TRACE_LEVEL_INFORMATION: u8 = 4;
+/// Fehler ("no-admin", "failed") nach so langer Zeit neu versuchen — z. B. nach der Freigabe.
+const RETRY: Duration = Duration::from_secs(5);
 
 #[derive(Default)]
 struct Counter {
@@ -50,6 +58,7 @@ struct Counter {
     wanted_at: Option<Instant>,
     running: bool,
     error: Option<&'static str>,
+    error_at: Option<Instant>,
     /// Geglättete FPS des zuletzt abgefragten Prozesses.
     last: Option<(u32, f64)>,
 }
@@ -70,6 +79,9 @@ pub struct Fps {
 pub fn gaming_fps() -> Fps {
     let mut c = counter().lock().unwrap();
     c.wanted_at = Some(Instant::now());
+    if c.error.is_some() && c.error_at.is_none_or(|t| t.elapsed() > RETRY) {
+        c.error = None;
+    }
     if !c.running && c.error.is_none() {
         c.running = true;
         c.since = Some(Instant::now());
@@ -111,7 +123,8 @@ struct Props {
 
 impl Props {
     fn new() -> Self {
-        let name_len = (SESSION.len() + 1) * 2;
+        // Platz für jeden Sitzungsnamen (auch die Probe-Sitzung) — ControlTrace schreibt ihn zurück.
+        let name_len = 1024 * 2;
         let size = std::mem::size_of::<EVENT_TRACE_PROPERTIES>() + name_len;
         let mut buf = vec![0u8; size];
         let p = buf.as_mut_ptr() as *mut EVENT_TRACE_PROPERTIES;
@@ -119,6 +132,7 @@ impl Props {
             (*p).Wnode.BufferSize = size as u32;
             (*p).Wnode.Flags = WNODE_FLAG_TRACED_GUID;
             (*p).Wnode.ClientContext = 1; // QPC
+            (*p).Wnode.Guid = SESSION_GUID;
             (*p).LogFileMode = EVENT_TRACE_REAL_TIME_MODE;
             (*p).LoggerNameOffset = std::mem::size_of::<EVENT_TRACE_PROPERTIES>() as u32;
         }
@@ -145,6 +159,7 @@ fn fail(error: &'static str) {
     let mut c = counter().lock().unwrap();
     c.running = false;
     c.error = Some(error);
+    c.error_at = Some(Instant::now());
 }
 
 fn run() {
@@ -221,35 +236,157 @@ unsafe extern "system" fn on_event(record: *mut EVENT_RECORD) {
     }
 }
 
-/// Einmalig freischalten: das eigene Konto in die Gruppe "Leistungsprotokollbenutzer"
-/// (S-1-5-32-559) aufnehmen. Danach darf die Notch die ETW-Sitzung ohne Adminrechte
-/// starten — der offizielle Weg (so beschreibt es auch PresentMon). Kostet eine
-/// UAC-Abfrage; wirksam nach dem nächsten Anmelden.
+/// Einmalig freischalten: startet die App selbst erhöht (`--fps-unlock <SID>`), damit die
+/// UAC-Abfrage "L4-Notchbar" zeigt statt PowerShell. Die SID ermittelt dieser, nicht
+/// erhöhte Prozess: bei einem Standardkonto meldet sich in der UAC-Abfrage ein anderes
+/// (Admin-)Konto an, freigeschaltet werden soll aber dieses hier.
 ///
-/// Ergebnis: "relogin" (aufgenommen bzw. schon drin), "cancelled" (UAC abgelehnt), "failed".
+/// Ergebnis: "ok" (FPS laufen sofort), "relogin" (erst nach Ab-/Anmelden), "cancelled", "failed".
 #[tauri::command]
 pub async fn fps_unlock() -> &'static str {
-    use base64::Engine;
-    // Die SID ermittelt der nicht erhöhte Prozess: bei einem Standardkonto meldet sich in der
-    // UAC-Abfrage ein anderes (Admin-)Konto an, aufgenommen werden soll aber dieses hier.
-    const OUTER: &str = r#"
-$sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
-$inner = "try { Add-LocalGroupMember -SID 'S-1-5-32-559' -Member '$sid' -ErrorAction Stop } catch { if (`$_.CategoryInfo.Reason -ne 'MemberExistsException') { exit 2 } }; exit 0"
-$enc = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($inner))
-try { $p = Start-Process powershell -Verb RunAs -WindowStyle Hidden -Wait -PassThru -ArgumentList "-NoProfile -EncodedCommand $enc"; exit $p.ExitCode } catch { exit 1 }
-"#;
-    let utf16: Vec<u8> = OUTER.encode_utf16().flat_map(u16::to_le_bytes).collect();
-    let encoded = base64::engine::general_purpose::STANDARD.encode(utf16);
-    tauri::async_runtime::spawn_blocking(move || {
-        let mut cmd = std::process::Command::new("powershell");
-        cmd.args(["-NoProfile", "-NonInteractive", "-EncodedCommand", &encoded]);
-        crate::convert::hide_console(&mut cmd);
-        match cmd.status().ok().and_then(|s| s.code()) {
-            Some(0) => "relogin",
-            Some(1) => "cancelled",
-            _ => "failed",
+    tauri::async_runtime::spawn_blocking(|| {
+        let Some(sid) = unlock::current_user_sid() else { return "failed" };
+        match unlock::run_elevated(&sid) {
+            Err(result) => result,
+            Ok(0) => {
+                // Fehler vergessen → der nächste Abruf startet die Sitzung neu.
+                let mut c = counter().lock().unwrap();
+                c.error = None;
+                drop(c);
+                if unlock::can_trace() { "ok" } else { "relogin" }
+            }
+            Ok(_) => "failed",
         }
     })
     .await
     .unwrap_or("failed")
+}
+
+/// Läuft im erhöhten Prozess (siehe main.rs). Rückgabe = Exit-Code: 0 ok, 2 fehlgeschlagen.
+pub fn elevated_unlock(sid: &str) -> i32 {
+    unlock::grant(sid)
+}
+
+mod unlock {
+    use std::os::windows::ffi::OsStrExt;
+
+    use windows::core::{w, PCWSTR, PWSTR};
+    use windows::Win32::Foundation::{CloseHandle, HANDLE, HLOCAL, LocalFree, ERROR_CANCELLED, ERROR_SUCCESS};
+    use windows::Win32::NetworkManagement::NetManagement::{NetLocalGroupAddMembers, LOCALGROUP_MEMBERS_INFO_0};
+    use windows::Win32::Security::Authorization::{ConvertSidToStringSidW, ConvertStringSidToSidW};
+    use windows::Win32::Security::{GetTokenInformation, LookupAccountSidW, TokenUser, PSID, SID_NAME_USE, TOKEN_QUERY, TOKEN_USER};
+    use windows::Win32::System::Diagnostics::Etw::{
+        EventAccessControl, StartTraceW, CONTROLTRACE_HANDLE, EventSecurityAddDACL, TRACELOG_ACCESS_REALTIME, TRACELOG_CREATE_REALTIME,
+        TRACELOG_GUID_ENABLE,
+    };
+    use windows::Win32::System::Threading::{GetCurrentProcess, GetExitCodeProcess, OpenProcessToken, WaitForSingleObject, INFINITE};
+    use windows::Win32::UI::Shell::{ShellExecuteExW, SEE_MASK_NOCLOSEPROCESS, SHELLEXECUTEINFOW};
+    use windows::Win32::UI::WindowsAndMessaging::SW_HIDE;
+
+    use super::{stop_session, wide, Props, D3D9, DXGI, DXGKRNL, SESSION_GUID};
+
+    /// Bereits Mitglied der Gruppe (ERROR_MEMBER_IN_ALIAS).
+    const MEMBER_IN_ALIAS: u32 = 1378;
+
+    pub fn current_user_sid() -> Option<String> {
+        unsafe {
+            let mut token = HANDLE::default();
+            OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token).ok()?;
+            let mut len = 0;
+            let _ = GetTokenInformation(token, TokenUser, None, 0, &mut len);
+            let mut buf = vec![0u8; len as usize];
+            let ok = GetTokenInformation(token, TokenUser, Some(buf.as_mut_ptr().cast()), len, &mut len);
+            let _ = CloseHandle(token);
+            ok.ok()?;
+            let user = &*(buf.as_ptr() as *const TOKEN_USER);
+            let mut text = PWSTR::null();
+            ConvertSidToStringSidW(user.User.Sid, &mut text).ok()?;
+            let sid = text.to_string().ok();
+            let _ = LocalFree(Some(HLOCAL(text.0.cast())));
+            sid
+        }
+    }
+
+    /// Startet diese exe erhöht mit `--fps-unlock <SID>` und wartet auf ihr Ende.
+    pub fn run_elevated(sid: &str) -> Result<u32, &'static str> {
+        let exe = std::env::current_exe().map_err(|_| "failed")?;
+        let exe: Vec<u16> = exe.as_os_str().encode_wide().chain(Some(0)).collect();
+        let params = wide(&format!("--fps-unlock {sid}"));
+        let mut info = SHELLEXECUTEINFOW {
+            cbSize: std::mem::size_of::<SHELLEXECUTEINFOW>() as u32,
+            fMask: SEE_MASK_NOCLOSEPROCESS,
+            lpVerb: w!("runas"),
+            lpFile: PCWSTR(exe.as_ptr()),
+            lpParameters: PCWSTR(params.as_ptr()),
+            nShow: SW_HIDE.0,
+            ..Default::default()
+        };
+        unsafe {
+            if let Err(e) = ShellExecuteExW(&mut info) {
+                return Err(if e.code() == ERROR_CANCELLED.to_hresult() { "cancelled" } else { "failed" });
+            }
+            if info.hProcess.is_invalid() {
+                return Err("failed");
+            }
+            WaitForSingleObject(info.hProcess, INFINITE);
+            let mut code = 1;
+            let _ = GetExitCodeProcess(info.hProcess, &mut code);
+            let _ = CloseHandle(info.hProcess);
+            Ok(code)
+        }
+    }
+
+    /// Im erhöhten Prozess: ETW-Rechte + Gruppe vergeben.
+    pub fn grant(sid: &str) -> i32 {
+        unsafe {
+            let mut psid = PSID::default();
+            if ConvertStringSidToSidW(PCWSTR(wide(sid).as_ptr()), &mut psid).is_err() {
+                return 2;
+            }
+            // 1. Direkte ETW-Rechte: Sitzung anlegen + lesen, Provider einschalten. Sofort wirksam.
+            let mut ok = EventAccessControl(&SESSION_GUID, EventSecurityAddDACL.0 as u32, psid, TRACELOG_CREATE_REALTIME | TRACELOG_ACCESS_REALTIME, true)
+                == ERROR_SUCCESS.0;
+            for provider in [DXGI, D3D9, DXGKRNL] {
+                ok &= EventAccessControl(&provider, EventSecurityAddDACL.0 as u32, psid, TRACELOG_GUID_ENABLE, true) == ERROR_SUCCESS.0;
+            }
+            // 2. Gruppe als Rückfallebene (falls Windows die GUID-Rechte nicht prüft).
+            let grouped = add_to_log_users(psid);
+            let _ = LocalFree(Some(HLOCAL(psid.0)));
+            if ok || grouped { 0 } else { 2 }
+        }
+    }
+
+    unsafe fn add_to_log_users(member: PSID) -> bool {
+        // Gruppenname ist sprachabhängig ("Leistungsprotokollbenutzer") → über die SID auflösen.
+        let mut group_sid = PSID::default();
+        if unsafe { ConvertStringSidToSidW(w!("S-1-5-32-559"), &mut group_sid) }.is_err() {
+            return false;
+        }
+        let mut name = [0u16; 256];
+        let mut domain = [0u16; 256];
+        let (mut name_len, mut domain_len) = (name.len() as u32, domain.len() as u32);
+        let mut kind = SID_NAME_USE::default();
+        let found = unsafe {
+            LookupAccountSidW(PCWSTR::null(), group_sid, Some(PWSTR(name.as_mut_ptr())), &mut name_len, Some(PWSTR(domain.as_mut_ptr())), &mut domain_len, &mut kind)
+        };
+        let _ = unsafe { LocalFree(Some(HLOCAL(group_sid.0))) };
+        if found.is_err() {
+            return false;
+        }
+        let entry = LOCALGROUP_MEMBERS_INFO_0 { lgrmi0_sid: member };
+        let status = unsafe { NetLocalGroupAddMembers(PCWSTR::null(), PCWSTR(name.as_ptr()), 0, &entry as *const _ as *const u8, 1) };
+        status == 0 || status == MEMBER_IN_ALIAS
+    }
+
+    /// Darf dieser (nicht erhöhte) Prozess jetzt eine Sitzung starten? Kurz anlegen, gleich beenden.
+    pub fn can_trace() -> bool {
+        let name = wide("NotchFpsProbe");
+        let mut props = Props::new();
+        let mut handle = CONTROLTRACE_HANDLE::default();
+        let ok = unsafe { StartTraceW(&mut handle, PCWSTR(name.as_ptr()), props.ptr()) } == ERROR_SUCCESS;
+        if ok {
+            stop_session(&name);
+        }
+        ok
+    }
 }

@@ -30,6 +30,11 @@ use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, SetForeground
 /// Tastaturen; AltGr+Leertaste erzeugt kein Zeichen, kollidiert also nicht.
 const SHORTCUT_LABEL: &str = "Strg+Alt+Leertaste";
 
+/// Für main.rs: erhöhter Aufruf von "FPS freischalten" (siehe fps::fps_unlock).
+pub fn fps_elevated_unlock(sid: &str) -> i32 {
+    fps::elevated_unlock(sid)
+}
+
 pub fn run() {
     let shortcut = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::Space);
 

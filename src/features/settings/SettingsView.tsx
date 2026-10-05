@@ -556,17 +556,18 @@ function UsageProviders() {
 
 /** FPS ohne Admin: einmal freischalten statt die Notch jedes Mal als Administrator zu starten. */
 function FpsUnlockRow() {
-  const [state, setState] = useState<"idle" | "busy" | "relogin" | "cancelled" | "failed">("idle");
+  const [state, setState] = useState<"idle" | "busy" | "ok" | "relogin" | "cancelled" | "failed">("idle");
   const hint = {
     idle: t("Einmalige Windows-Abfrage, danach nie wieder Administratorrechte"),
     busy: t("Bitte die Windows-Abfrage bestätigen …"),
+    ok: t("Freigeschaltet – die FPS laufen"),
     relogin: t("Fertig – einmal ab- und wieder anmelden, dann laufen die FPS"),
     cancelled: t("Abgebrochen"),
-    failed: t("Hat nicht geklappt – Notch einmal als Administrator starten"),
+    failed: t("Hat nicht geklappt – L4-Notchbar einmal als Administrator starten"),
   }[state];
   return (
     <Row label={t("FPS freischalten")} hint={hint}>
-      {state === "relogin" ? (
+      {state === "ok" || state === "relogin" ? (
         <CheckCircle size={18} weight="fill" className="text-green" />
       ) : (
         <Button

@@ -358,7 +358,7 @@ export const display = {
 
 /** FPS des Vordergrundprozesses (ETW). error: no-admin | failed. */
 /** Einmalig ohne Admin freischalten (Gruppe "Leistungsprotokollbenutzer", eine UAC-Abfrage). */
-export function unlockFps(): Promise<"relogin" | "cancelled" | "failed"> {
+export function unlockFps(): Promise<"ok" | "relogin" | "cancelled" | "failed"> {
   if (isNative) return invoke("fps_unlock");
   return new Promise((r) => setTimeout(() => r("relogin"), 600));
 }

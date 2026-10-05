@@ -147,10 +147,11 @@ export function Notch() {
               <motion.div
                 key="open"
                 className="absolute top-0 left-1/2 flex flex-col"
-                style={{ width: size.w, height: size.h, marginLeft: -size.w / 2, transformOrigin: "50% 0" }}
-                initial={{ opacity: 0, transform: "translateY(-6px) scale(0.96)", filter: "blur(6px)" }}
-                animate={{ opacity: 1, transform: "translateY(0px) scale(1)", filter: "blur(0px)", transition: content.enter }}
-                exit={{ opacity: 0, transform: "translateY(-4px) scale(0.98)", filter: "blur(4px)", transition: content.exit }}
+                style={{ width: size.w, height: size.h, marginLeft: -size.w / 2 }}
+                // No scale here: scaling re-rasterizes the small dock icons at shifting subpixels every frame, which reads as jitter (issue #3).
+                initial={{ opacity: 0, transform: "translateY(-6px)", filter: "blur(6px)" }}
+                animate={{ opacity: 1, transform: "translateY(0px)", filter: "blur(0px)", transition: content.enter }}
+                exit={{ opacity: 0, transform: "translateY(-4px)", filter: "blur(4px)", transition: content.exit }}
               >
                 <Header title={t(tab.label)} onDragStart={drag.onPointerDown} />
                 <div className="relative min-h-0 flex-1 overflow-clip">

@@ -18,7 +18,7 @@
   <a href="https://github.com/Linux5Real/L4-Windows-NotchBar/issues/new"><b>Suggest an idea</b></a>
 </p>
 
-https://github.com/user-attachments/assets/af40fec3-bc05-4ee3-9f90-fe30c86ed716
+https://github.com/user-attachments/assets/0883a7b8-6197-4a75-9c49-da58bf644983
 
 A Dynamic-Island-style notch for Windows. It sits at the top of your screen, stays out of the way until you need it, and opens on hover, click or **Ctrl + Alt + Space**. Music, timers, files, your portfolio and a Discord call are all one glance away.
 
@@ -28,23 +28,6 @@ It is small and fast: a single executable of a few megabytes, smooth animations,
 > **Missing something?** If you have an idea for a new tool, a feature you'd love to see or something that bugs you, just [open an issue](https://github.com/Linux5Real/L4-Windows-NotchBar/issues/new) and describe it. Every idea is welcome.
 
 ## What it does
-
-<p align="center">
-  <img src="docs/media/now-playing.png" width="49%" alt="Now Playing with cover, progress and equalizer" />
-  <img src="docs/media/overview.png" width="49%" alt="Overview with time, weather, music and volume" />
-</p>
-<p align="center">
-  <img src="docs/media/discord.png" width="49%" alt="Discord call with speaking members and call controls" />
-  <img src="docs/media/portfolio.png" width="49%" alt="Portfolio with value, daily change, holdings and a 30-day chart" />
-</p>
-<p align="center">
-  <img src="docs/media/ask.png" width="49%" alt="Ask: a question answered by Claude Opus 5.5" />
-  <img src="docs/media/converter.png" width="49%" alt="Converter turning three PNGs into WebP" />
-</p>
-<p align="center">
-  <img src="docs/media/clipboard.png" width="49%" alt="Clipboard history with images, links, text and files" />
-  <img src="docs/media/weather.png" width="49%" alt="Weather with current conditions and a 7-day forecast" />
-</p>
 
 ### Windows and system
 
@@ -137,7 +120,7 @@ npm run typecheck  # before every commit
 npm run i18n       # finds missing English strings (add --fix for TODO entries)
 ```
 
-In the browser, `?showcase` switches to English with curated demo data (music, Discord call, portfolio, chat). It is what the screenshots and the film above were captured from.
+In the browser, `?showcase` switches to English with curated demo data (music, Discord call, portfolio, chat). It is what the film above was captured from.
 
 To build a standalone executable:
 
@@ -164,9 +147,7 @@ Run Tauri commands from PowerShell. In Git Bash, `/usr/bin/link` shadows the MSV
 ```
 src/            React frontend: notch shape, tools, design tokens, i18n
 src-tauri/      Rust backend: window, hit testing, tray and the Windows APIs
-scripts/        Helper scripts such as the i18n check
-docs/media/     Screenshots and the demo film used in this README
-```
+scripts/        Helper scripts such as the i18n check```
 
 ## License
 

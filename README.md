@@ -118,7 +118,7 @@ Every integration is optional. Tools you don't connect simply stay out of your w
 
 1. Create an application at [discord.com/developers](https://discord.com/developers).
 2. Under OAuth2, copy the **Client ID** and **Client Secret** into **Connections**.
-3. Leave the redirect list empty. Discord rejects RPC authorization when one is set.
+3. Under OAuth2, Redirects, add `http://localhost` and save. Without it Discord keeps asking for permission again.
 4. Join a call. Discord asks you once to confirm.
 
 **Weather.** Works out of the box with your approximate location (city level, from your IP). Pick a city by hand in the weather tool if you prefer; then the IP lookup stops.

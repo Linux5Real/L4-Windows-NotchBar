@@ -25,9 +25,8 @@ use crate::secrets;
 const SCOPES: [&str; 4] = ["rpc", "rpc.voice.read", "rpc.voice.write", "identify"];
 const RETRY: Duration = Duration::from_secs(5);
 const TOKEN_URL: &str = "https://discord.com/api/oauth2/token";
-/// Discord's RPC authorization rejects a `redirect_uri`, yet requires one as soon as the
-/// app has redirects configured in the developer portal. So: don't configure any.
-/// The token exchange only tries it as a fallback in case one is set.
+/// Redirect the app needs in the developer portal: without it, Discord kept asking for
+/// permission in a loop (issue #2). The token exchange tries without it first, then with it.
 const REDIRECT: &str = "http://localhost";
 
 #[derive(Default)]
@@ -220,7 +219,7 @@ impl Session {
                 }
                 "AUTHORIZE" => {
                     let msg = data["message"].as_str().unwrap_or("Abgelehnt");
-                    Err(if msg.contains("redirect_uri") || msg.contains("Redirect URI") { "Weiterleitung im Portal löschen".into() } else { msg.to_string() })
+                    Err(if msg.contains("redirect_uri") || msg.contains("Redirect URI") { "Im Portal http://localhost als Redirect eintragen".into() } else { msg.to_string() })
                 }
                 _ => Ok(()),
             };

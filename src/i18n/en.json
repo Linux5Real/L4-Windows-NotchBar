@@ -85,7 +85,7 @@
  "Discord fragt einmal nach, ob die Notch deinen Sprachstatus sehen darf.": "Discord asks once whether the notch may see your voice status.",
  "Discord ist aus": "Discord is off",
  "Discord läuft nicht": "Discord isn't running",
- "discord.com/developers → New Application → OAuth2: Client-ID und Client-Secret kopieren. Keine Weiterleitung (Redirect) eintragen. Beim ersten Verbinden fragt Discord einmal nach.": "discord.com/developers → New Application → OAuth2: copy the client ID and client secret. Don't add a redirect. Discord asks once on the first connection.",
+ "discord.com/developers → New Application → OAuth2: Client-ID und Client-Secret kopieren und unter Redirects http://localhost eintragen und speichern. Beim ersten Verbinden fragt Discord einmal nach.": "discord.com/developers → New Application → OAuth2: copy the client ID and client secret, add http://localhost under Redirects and save. Discord asks once on the first connection.",
  "Du hast die neueste Version": "You have the latest version",
  "Echt": "Live",
  "Eigene Zeit": "Custom time",

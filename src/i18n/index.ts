@@ -66,7 +66,7 @@ const backendPatterns: [RegExp, string][] = [
   [/^Kein Code$/, "No code received"],
   [/^Token abgelehnt$/, "Token rejected"],
   [/^Abgelehnt$/, "Declined"],
-  [/^Weiterleitung im Portal löschen$/, "Remove the redirect in the developer portal"],
+  [/^Im Portal http:\/\/localhost als Redirect eintragen$/, "Add http://localhost as a redirect in the developer portal"],
 ];
 
 export function tBackend(msg: string): string {

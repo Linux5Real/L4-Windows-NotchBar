@@ -460,7 +460,7 @@ function Discord() {
       </Row>
       <SecretRow name="discord.secret" label={t("Client-Secret")} onSaved={reconnectDiscord} />
       <div className="px-3 py-2 text-caption text-label-3">
-        {t("discord.com/developers → New Application → OAuth2: Client-ID und Client-Secret kopieren. Keine Weiterleitung (Redirect) eintragen. Beim ersten Verbinden fragt Discord einmal nach.")}
+        {t("discord.com/developers → New Application → OAuth2: Client-ID und Client-Secret kopieren und unter Redirects http://localhost eintragen und speichern. Beim ersten Verbinden fragt Discord einmal nach.")}
       </div>
     </Group>
   );

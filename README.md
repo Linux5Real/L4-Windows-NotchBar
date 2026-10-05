@@ -22,7 +22,7 @@ https://github.com/user-attachments/assets/0883a7b8-6197-4a75-9c49-da58bf644983
 
 A Dynamic-Island-style notch for Windows. It sits at the top of your screen, stays out of the way until you need it, and opens on hover, click or **Ctrl + Alt + Space**.
 
-Inside: music controls with a live equalizer, live weather, your Discord call, your portfolio, an AI chat (Claude, ChatGPT and more) with your usage limits, clipboard history, a file shelf, a file and unit converter, timers, to-dos and notes, live hardware stats with FPS for games, and privacy dots for mic, camera and screen recording.
+Inside: music controls with a live equalizer, a vault for passwords and 2FA codes, live weather, your Discord call, your portfolio, an AI chat (Claude, ChatGPT and more) with your usage limits, clipboard history, a file shelf, a file and unit converter, timers, to-dos and notes, live hardware stats with FPS for games, and privacy dots for mic, camera and screen recording.
 
 Make it yours: reorder or hide any tool, move the notch, pick the monitor, hide it automatically in fullscreen apps, or triple-click it to fade it out when it's in the way. All of that in a single executable of a few megabytes, with smooth animations throughout.
 
@@ -54,6 +54,27 @@ Make it yours: reorder or hide any tool, move the notch, pick the monitor, hide 
 - **Timer** with focus and break presets, custom durations, six alarm sounds and a running countdown in the closed Notch. An expired timer stays visible until you dismiss it.
 - **To-dos** and **notes** live on your machine and need no account.
 - **Converter** handles units, images (PNG, JPG, WebP, ICO, BMP, DDS), documents (PDF, DOCX, TXT, Markdown, HTML), spreadsheets (XLSX, CSV, JSON) and audio or video if ffmpeg is installed.
+
+## New in 1.1: Vault
+
+Passwords and two-factor codes, one hover away and encrypted on your PC.
+
+<p>
+  <img src="docs/media/vault-passwords.png" width="49%" alt="Saved passwords, one of them shown after entering the PIN" />
+  <img src="docs/media/vault-2fa.png" width="49%" alt="Live 2FA codes with a countdown ring" />
+</p>
+<p>
+  <img src="docs/media/vault-add-2fa.png" width="49%" alt="Adding 2FA by pasting a QR code screenshot" />
+  <img src="docs/media/vault-generator.png" width="49%" alt="Password generator with length, digits and symbols" />
+</p>
+
+- **Passwords** with name and username or email. Copy either one with a click, show or edit the password, or let the generator create a strong one.
+- **2FA codes** with a live countdown. Screenshot the QR code (Win + Shift + S) and press **Ctrl + V**, or type the key, then name it.
+- **4-digit PIN** before anything secret is shown or copied, adjustable for passwords and 2FA separately in **Settings → Tools → Vault**. Five wrong tries lock it for 30 seconds, doubling from there.
+- **Never in clipboard history.** Copies skip the Notch clipboard and Windows' Win + V history, and passwords and codes leave the clipboard after 30 seconds.
+- **Local only**, encrypted with Windows DPAPI and bound to your Windows account. Forgot the PIN? **Reset vault** in settings deletes everything; there is no back door.
+
+The vault is off by default; turn it on under **Settings → Tools**.
 
 ## Install
 
@@ -105,6 +126,7 @@ Every integration is optional. Tools you don't connect simply stay out of your w
 L4-Notchbar has no account, no server of its own, no analytics and no tracking. Everything it stores (settings, to-dos, notes, timer presets) lives on your machine. The clipboard history is kept in memory only and never written to disk.
 
 - **Keys and secrets** are stored in the Windows Credential Manager, never in a plain file, and they are never sent back to the interface.
+- **The vault** lives in one file encrypted with Windows DPAPI, readable only under your Windows account. The PIN is checked in the app's backend, not in the interface, and 2FA keys never leave the backend.
 - **Integrations talk directly to their own service** and nowhere else: Ask to the AI provider you chose, Portfolio to Trading 212, Discord to the Discord app on your PC (and discord.com for the sign-in), AI usage to the provider you are signed in to, Weather to Open-Meteo (plus an IP-based city lookup unless you picked a city). If you don't set an integration up, it makes no requests.
 - **Updates.** Once a day the app makes a single anonymous request to this repository's public release page to check for a new version. No personal data is sent. If an update exists, a dot appears on the gear icon and **Settings → General → Updates** shows it. Nothing is downloaded until you click **Update now**; the app then installs the update and restarts. Every update is cryptographically signed and verified before it is installed. You can turn the daily check off in the same place.
 

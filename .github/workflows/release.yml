@@ -18,6 +18,7 @@ jobs:
       version: ${{ steps.version.outputs.version }}
       release: ${{ steps.version.outputs.release }}
       notes: ${{ steps.version.outputs.notes }}
+      highlights: ${{ steps.version.outputs.highlights }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -34,6 +35,12 @@ jobs:
             exit 0
           fi
           echo "release=true" >> "$GITHUB_OUTPUT"
+          # Hand-written notes with screenshots (docs/releases/vX.Y.Z.md), if there are any.
+          {
+            echo "highlights<<EOF"
+            cat "docs/releases/v$version.md" 2>/dev/null && echo || true
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
           # Changes since the previous release tag.
           previous=$(git tag --list 'v*' --sort=-v:refname | head -n 1)
           range=${previous:+$previous..HEAD}
@@ -73,6 +80,8 @@ jobs:
             Already installed? The app offers this version under **Settings → General → Updates**.
 
             Windows SmartScreen may warn because the installer is not code-signed yet: **More info → Run anyway**.
+
+            ${{ needs.check.outputs.highlights }}
 
             ### Changes
             ${{ needs.check.outputs.notes }}

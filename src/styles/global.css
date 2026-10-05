@@ -1,0 +1,105 @@
+@import "tailwindcss";
+@import "@fontsource-variable/inter/opsz.css";
+@import "./tokens.css";
+
+/* Registriert, damit der Akzent beim Songwechsel weich überblendet statt springt. */
+@property --accent {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #0a84ff;
+}
+[style*="--accent"] {
+  transition: --accent 500ms ease;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  /* Fenster ist transparent; nur die Notch selbst zeichnet etwas. */
+  background: transparent;
+  overflow: hidden;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-optical-sizing: auto;
+  /* ss03 = runde Anführungszeichen, cv05 = l mit Fuß — beides näher an SF Pro. */
+  font-feature-settings: "ss03", "cv05";
+  -webkit-font-smoothing: antialiased;
+  color: var(--color-label);
+  user-select: none;
+  cursor: default;
+}
+
+/* Zahlen, die sich ändern (Zeiten, Timer, Werte), dürfen nicht springen. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * Press-Feedback für alles Klickbare. Sofort reagieren (scale beim Drücken),
+ * Hover nur bei echter Maus. Siehe docs/DESIGN.md → Interaktion.
+ */
+.pressable {
+  transition:
+    transform 140ms var(--ease-out),
+    background-color 160ms ease,
+    color 160ms ease,
+    opacity 160ms ease;
+}
+.pressable:active {
+  transform: scale(0.94);
+}
+/* Breite Flächen (Karten): 6 % wären bei 500 px ein Ruck — nur leicht eindrücken. */
+.pressable.pressable-wide:active {
+  transform: scale(0.985);
+}
+@media (hover: hover) and (pointer: fine) {
+  .pressable-fill:hover {
+    background-color: var(--color-fill-2);
+  }
+}
+.pressable-fill:active {
+  background-color: var(--color-fill-3);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pressable:active {
+    transform: none;
+  }
+}
+
+/* Datenschutz-Punkt: weiches Glimmen, solange gesprochen wird. */
+.privacy-dot[data-pulse] {
+  animation: privacy-pulse 1.1s ease-in-out infinite alternate;
+}
+@keyframes privacy-pulse {
+  from {
+    box-shadow: 0 0 0 0 var(--dot);
+  }
+  to {
+    box-shadow: 0 0 6px 1px var(--dot);
+  }
+}
+
+/* Hardware-Verlauf: Linie gleitet eine Sekunde lang um einen Schritt nach links. */
+.trend-scroll {
+  animation: trend-scroll 1s linear forwards;
+}
+@keyframes trend-scroll {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(calc(-1 * var(--step)));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .privacy-dot[data-pulse],
+  .trend-scroll {
+    animation: none;
+  }
+}

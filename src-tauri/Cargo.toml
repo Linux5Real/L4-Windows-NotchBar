@@ -1,0 +1,74 @@
+[package]
+name = "notch"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-only"
+
+[lib]
+name = "notch_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-single-instance = "2"
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-autostart = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+base64 = "0.22"
+arboard = { version = "3", features = ["image-data"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "gif", "bmp", "ico", "tiff", "dds", "tga"] }
+cpal = "0.18"
+rustfft = "6"
+reqwest = { version = "0.13", default-features = false, features = ["native-tls", "json", "charset"] }
+sysinfo = "0.39"
+tokio = { version = "1", features = ["net", "io-util", "sync", "time", "macros"] }
+calamine = { version = "0.36.1", features = ["dates"] }
+rust_xlsxwriter = "0.99.1"
+pdf-extract = "0.12.1"
+pulldown-cmark = "0.13.4"
+texpresso = "2.0.2"
+zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
+quick-xml = "0.42.0"
+csv = "1.4.0"
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
+
+[target.'cfg(windows)'.dependencies]
+webview2-com = "0.39"
+windows = { version = "0.62", features = [
+  "Foundation",
+  "Media_Control",
+  "UI_Shell",
+  "Storage_Streams",
+  "Win32_Foundation",
+  "Win32_Media_Audio",
+  "Win32_Media_Audio_Endpoints",
+  "Win32_Graphics_Dxgi",
+  "Win32_Graphics_Gdi",
+  "Win32_NetworkManagement_IpHelper",
+  "Win32_Networking_WinSock",
+  "Win32_System_Performance",
+  "Win32_System_Com",
+  "Win32_System_Diagnostics_Etw",
+  "Win32_System_Registry",
+  "Win32_System_Time",
+  "Win32_Security_Credentials",
+  "Win32_System_Power",
+  "Win32_System_SystemInformation",
+  "Win32_System_DataExchange",
+  "Win32_System_Memory",
+  "Win32_System_LibraryLoader",
+  "Win32_UI_Input_KeyboardAndMouse",
+  "Win32_UI_WindowsAndMessaging",
+] }
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true

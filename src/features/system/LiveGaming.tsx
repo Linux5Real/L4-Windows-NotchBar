@@ -5,6 +5,7 @@ import { t } from "../../i18n";
 import { fps, useFpsPolling } from "./gaming";
 import { levelColor } from "./SystemView";
 import { system } from "./store";
+import { LiveEdge } from "../../notch/liveEdges";
 
 /*
  *   ╭──────────────────────────────────────────────────────────────╮
@@ -27,7 +28,7 @@ export function LiveGaming() {
       animate={{ opacity: 1, filter: "blur(0px)", transition: content.enter }}
       exit={{ opacity: 0, filter: "blur(4px)", transition: content.exit }}
     >
-      <div className="flex items-center gap-3">
+      <LiveEdge side="left" className="flex items-center gap-3">
         <span className="flex items-baseline gap-1" title={hint(f.error)}>
           <span className="tabular flex w-[26px] justify-end text-footnote font-semibold text-label">
             {/* Lock = not unlocked yet (Settings → Display), sign-out = unlocked, active after the next sign-in, dash = no frame measured yet. */}
@@ -44,11 +45,11 @@ export function LiveGaming() {
           <span className="text-caption font-medium text-label-3">FPS</span>
         </span>
         <Stat label="CPU" value={stats?.cpu ?? null} />
-      </div>
-      <div className="flex items-center gap-3">
+      </LiveEdge>
+      <LiveEdge side="right" className="flex items-center gap-3">
         <Stat label="GPU" value={stats?.gpu ?? null} />
         <Stat label="RAM" value={mem} />
-      </div>
+      </LiveEdge>
     </motion.div>
   );
 }

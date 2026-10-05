@@ -3,6 +3,7 @@ import { MusicNoteSimple } from "@phosphor-icons/react";
 import { content } from "../../design/motion";
 import type { NowPlaying } from "../../platform/media";
 import { Equalizer } from "./Equalizer";
+import { LiveEdge } from "../../notch/liveEdges";
 
 /**
  * Closed notch while music plays: cover on the left, equalizer on the right,
@@ -16,8 +17,12 @@ export function LiveActivity({ np }: { np: NowPlaying }) {
       animate={{ opacity: 1, filter: "blur(0px)", transition: content.enter }}
       exit={{ opacity: 0, filter: "blur(4px)", transition: content.exit }}
     >
-      <LiveArtwork artwork={np.artwork} />
-      <Equalizer playing={np.isPlaying} />
+      <LiveEdge side="left">
+        <LiveArtwork artwork={np.artwork} />
+      </LiveEdge>
+      <LiveEdge side="right">
+        <Equalizer playing={np.isPlaying} />
+      </LiveEdge>
     </motion.div>
   );
 }

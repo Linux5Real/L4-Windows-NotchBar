@@ -4,6 +4,7 @@ import { content } from "../../design/motion";
 import type { DiscordCall } from "../../platform/services";
 import { Equalizer } from "../now-playing/Equalizer";
 import { GuildIcon } from "./DiscordView";
+import { LiveEdge } from "../../notch/liveEdges";
 
 /**
  * Closed notch during a Discord call (like a phone call on the Dynamic Island):
@@ -19,16 +20,31 @@ export function LiveDiscord({ call }: { call: DiscordCall }) {
       animate={{ opacity: 1, filter: "blur(0px)", transition: content.enter }}
       exit={{ opacity: 0, filter: "blur(4px)", transition: content.exit }}
     >
-      <GuildIcon call={call} size={20} />
-      {call.deaf ? (
-        <SpeakerSimpleSlash size={15} weight="fill" className="mr-0.5 text-red" />
-      ) : call.mute ? (
-        <MicrophoneSlash size={15} weight="fill" className="mr-0.5 text-red" />
-      ) : (
-        <span className="mr-0.5">
-          <Equalizer playing={call.speaking || call.members.some((m) => m.speaking)} tint="bg-green" />
-        </span>
-      )}
+      <LiveEdge side="left">
+        <GuildIcon call={call} size={20} />
+      </LiveEdge>
+      <LiveEdge side="right">
+        {call.deaf ? (
+          <SpeakerSimpleSlash
+            size={15}
+            weight="fill"
+            className="mr-0.5 text-red"
+          />
+        ) : call.mute ? (
+          <MicrophoneSlash
+            size={15}
+            weight="fill"
+            className="mr-0.5 text-red"
+          />
+        ) : (
+          <span className="mr-0.5">
+            <Equalizer
+              playing={call.speaking || call.members.some((m) => m.speaking)}
+              tint="bg-green"
+            />
+          </span>
+        )}
+      </LiveEdge>
     </motion.div>
   );
 }

@@ -1,6 +1,7 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { animate, motion, useMotionValue, useTransform, type Transition } from "motion/react";
 import type { NotchGeometry } from "./geometry";
+import { ShapeWidth } from "./liveEdges";
 
 interface Props {
   geometry: NotchGeometry;
@@ -36,12 +37,10 @@ export function NotchShape({ geometry, transition, elevated, children }: Props) 
       first.current = false;
       return;
     }
-    const controls = [
-      animate(w, geometry.w, transition),
-      animate(h, geometry.h, transition),
-      animate(r, geometry.r, transition),
-      animate(ear, geometry.ear, transition),
-    ];
+    // Settle to within 0.01 px: the live activity follows the width on subpixels, and
+    // Motion's default rest threshold ended every spring with a visible ~0.25 px jump.
+    const t = { ...transition, restDelta: 0.01, restSpeed: 0.1 };
+    const controls = [animate(w, geometry.w, t), animate(h, geometry.h, t), animate(r, geometry.r, t), animate(ear, geometry.ear, t)];
     return () => controls.forEach((c) => c.stop());
   }, [geometry.w, geometry.h, geometry.r, geometry.ear, transition, w, h, r, ear]);
 
@@ -89,7 +88,7 @@ export function NotchShape({ geometry, transition, elevated, children }: Props) 
         className="absolute inset-0 overflow-clip bg-notch"
         style={{ borderBottomLeftRadius: r, borderBottomRightRadius: r }}
       >
-        {children}
+        <ShapeWidth.Provider value={w}>{children}</ShapeWidth.Provider>
       </motion.div>
     </motion.div>
   );

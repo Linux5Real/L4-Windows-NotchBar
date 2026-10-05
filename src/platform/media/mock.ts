@@ -1,5 +1,6 @@
 import type { MediaSource, NowPlaying } from "./types";
 import { livePosition } from "./types";
+import { showcase, showcaseStartPosition, showcaseTracks } from "../../dev/showcase-data";
 
 // Generated SVG covers so the prototype needs no external images.
 function cover(a: string, b: string, c: string): string {
@@ -15,7 +16,7 @@ function cover(a: string, b: string, c: string): string {
   return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }
 
-const tracks: Omit<NowPlaying, "isPlaying" | "position" | "updatedAt" | "canSeek">[] = [
+const defaultTracks: Omit<NowPlaying, "isPlaying" | "position" | "updatedAt" | "canSeek">[] = [
   {
     title: "Midnight City",
     artist: "M83",
@@ -39,9 +40,14 @@ const tracks: Omit<NowPlaying, "isPlaying" | "position" | "updatedAt" | "canSeek
   },
 ];
 
+const tracks = showcase ? showcaseTracks : defaultTracks;
+
 export function createMockMedia(): MediaSource {
   let index = 0;
-  let state: NowPlaying = { ...tracks[0], isPlaying: true, position: 42, canSeek: true, updatedAt: performance.now() };
+  // Showcase starts paused, so the video can open on an idle notch.
+  let state: NowPlaying = showcase
+    ? { ...tracks[0], isPlaying: false, position: showcaseStartPosition, canSeek: true, updatedAt: performance.now() }
+    : { ...tracks[0], isPlaying: true, position: 42, canSeek: true, updatedAt: performance.now() };
   const listeners = new Set<() => void>();
 
   const set = (patch: Partial<NowPlaying>) => {

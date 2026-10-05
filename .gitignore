@@ -4,3 +4,6 @@ src-tauri/target
 src-tauri/gen
 *.local
 *.tsbuildinfo
+
+# Launch-video workspace (frames, renders, intermediates)
+brag-output/

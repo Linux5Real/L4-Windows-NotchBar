@@ -281,7 +281,7 @@ function Card(props: { item: ClipItem; now: number; copied: boolean; selected: b
             exit={{ opacity: 0 }}
             transition={fade}
           >
-            <Check size={14} weight="bold" /> Kopiert
+            <Check size={14} weight="bold" /> {t("Kopiert")}
           </motion.div>
         )}
       </AnimatePresence>

@@ -1,16 +1,37 @@
 # L4-Notchbar
 
+![L4-Notchbar: the open notch showing time, weather, music and volume at the top of a Windows desktop](docs/media/hero.png)
+
+<p align="center">
+  <img src="docs/media/demo.webp" alt="L4-Notchbar in action: music, overview and a Discord call" width="800" />
+  <br />
+  <a href="docs/media/demo.mp4"><b>Watch the full 44-second film (MP4)</b></a>
+</p>
+
 A Dynamic-Island-style notch for Windows. Windows never had one, so I built it. It sits at the top of your screen, stays out of the way until you need it, and opens on hover, click or **Ctrl + Alt + Space**. Music, timers, files, your portfolio and a Discord call are all one glance away.
 
-It runs on **Tauri 2, React 19, TypeScript, Motion and Tailwind 4**. The app uses WebView2 instead of bundling Chromium, so the release build is a single executable of a few megabytes. Animations stay smooth because the window itself never resizes. Only the content inside it moves.
+It is small and fast: a single executable of a few megabytes, smooth animations, and everything you don't need can be hidden.
+
+**Missing something?** If you have an idea for a new tool, a feature you'd love to see or something that bugs you, just [open an issue](https://github.com/Linux5Real/L4-Windows-NotchBar/issues/new) and describe it. Every idea is welcome.
 
 ## What it does
+
+| | |
+| --- | --- |
+| ![Now Playing with cover, progress and equalizer](docs/media/now-playing.png) | ![Overview with time, weather, music and volume](docs/media/overview.png) |
+| **Now Playing** | **Overview** |
+| ![Discord call with speaking members and call controls](docs/media/discord.png) | ![Portfolio with value, daily change, holdings and a 30-day chart](docs/media/portfolio.png) |
+| **Discord** | **Portfolio** |
+| ![Ask: a question answered by Claude Opus 5.5](docs/media/ask.png) | ![Converter turning three PNGs into WebP](docs/media/converter.png) |
+| **Ask** | **Converter** |
+| ![Clipboard history with images, links, text and files](docs/media/clipboard.png) | |
+| **Clipboard** | |
 
 ### Windows and system
 
 - **Overview** is a small control center: time, weather, what is playing right now, Windows focus and a volume slider.
 - **Now Playing** controls anything with a Windows media session (Spotify, browser players and so on) and shows cover, title, progress and a live equalizer driven by the actual audio output.
-- **Clipboard** keeps a history of text, links, images and files, with search and previews. Password managers are excluded on purpose, and nothing is written to disk.
+- **Clipboard** keeps a history of text, links, images and files, with filters and previews. Password managers are excluded on purpose, and nothing is written to disk.
 - **Shelf** is a parking spot for files. Drop them onto the Notch or press Ctrl + V, then open, copy or reveal them later.
 - **Hardware** shows live CPU, RAM, GPU, VRAM and ping, with history that keeps recording while the Notch is closed.
 - **Gaming mode** puts FPS, CPU, GPU and RAM into the closed Notch, always or only while a fullscreen app runs. FPS works for DirectX, OpenGL and Vulkan games. Windows only allows this for members of the *Performance Log Users* group: click **Settings → Display → Unlock FPS** once, confirm the Windows prompt, then sign out and back in. A lock icon in the Notch means this step is still missing.
@@ -40,10 +61,6 @@ Built and tested on Windows 11; Windows 10 should work but is untested. If WebVi
 
 The installer is not code-signed yet, so Windows SmartScreen may warn on first launch. Click **More info → Run anyway**.
 
-### Updates
-
-L4-Notchbar checks once a day whether a new version exists. The check is a single anonymous request to this repository's public release page; no personal data is sent. If an update is available, a dot appears on the gear icon and **Settings → General → Updates** shows the new version. Nothing is downloaded until you click **Update now**; the app then installs the update and restarts. Every update is cryptographically signed and verified before it is installed. You can turn the daily check off in the same place.
-
 ## Using it
 
 | Action | How |
@@ -56,24 +73,40 @@ L4-Notchbar checks once a day whether a new version exists. The check is a singl
 | Focus mode | Click the Notch three times quickly. It turns half transparent and clicks pass through. Three more clicks bring it back |
 | Add files | Drag them onto the Notch, or paste with Ctrl + V |
 
+## Settings
+
 Settings are grouped into General, Display, Tools, Timer, AI and Connections. There you can reorder (drag) or hide tools, pick the monitor, hide the Notch automatically during fullscreen apps, enable autostart and switch between German and English.
 
-## Setting up the integrations
+### Setting up the integrations
 
-All keys and secrets are stored in the Windows Credential Manager, never in a plain file, and they are never sent back to the interface.
+Every integration is optional. Tools you don't connect simply stay out of your way.
 
-**Ask.** Choose a provider in settings and paste your API key. For a custom endpoint, enter the base URL (usually ending in `/v1`) and a model ID.
+**Ask (AI chat).** Under **AI**, choose a provider (Claude, ChatGPT, OpenRouter or a custom endpoint) and paste your API key. For a custom endpoint, enter the base URL (usually ending in `/v1`) and a model ID. The reasoning effort is set there too.
 
-**Portfolio.** In Trading 212 go to Settings, API (Beta) and create a key with permission for account data and portfolio. Nothing more is required. Paste key and secret into the L4-Notchbar settings.
+**AI usage.** Nothing to enter. If you are signed in to Claude Code, the Codex CLI, the Gemini CLI or Cursor on this PC, the Notch reads their existing local login and shows your limits.
+
+**Portfolio.** In Trading 212 go to Settings, API (Beta) and create a key with permission for account data and portfolio. Nothing more is required. Paste key and secret under **Connections** and choose live or demo account.
 
 **Discord.** Discord only hands out voice permissions to your own application:
 
 1. Create an application at [discord.com/developers](https://discord.com/developers).
-2. Under OAuth2, copy the **Client ID** and **Client Secret** into the L4-Notchbar settings.
+2. Under OAuth2, copy the **Client ID** and **Client Secret** into **Connections**.
 3. Leave the redirect list empty. Discord rejects RPC authorization when one is set.
 4. Join a call. Discord asks you once to confirm.
 
+**Weather.** Works out of the box with your approximate location (city level, from your IP). Pick a city by hand in the weather tool if you prefer; then the IP lookup stops.
+
+## Your data stays on your PC
+
+L4-Notchbar has no account, no server of its own, no analytics and no tracking. Everything it stores (settings, to-dos, notes, timer presets) lives on your machine. The clipboard history is kept in memory only and never written to disk.
+
+- **Keys and secrets** are stored in the Windows Credential Manager, never in a plain file, and they are never sent back to the interface.
+- **Integrations talk directly to their own service** and nowhere else: Ask to the AI provider you chose, Portfolio to Trading 212, Discord to the Discord app on your PC (and discord.com for the sign-in), AI usage to the provider you are signed in to, Weather to Open-Meteo (plus an IP-based city lookup unless you picked a city). If you don't set an integration up, it makes no requests.
+- **Updates.** Once a day the app makes a single anonymous request to this repository's public release page to check for a new version. No personal data is sent. If an update exists, a dot appears on the gear icon and **Settings → General → Updates** shows it. Nothing is downloaded until you click **Update now**; the app then installs the update and restarts. Every update is cryptographically signed and verified before it is installed. You can turn the daily check off in the same place.
+
 ## Development
+
+Built with **Tauri 2, React 19, TypeScript, Motion and Tailwind 4**. The app uses WebView2 instead of bundling Chromium, which keeps the release build at a few megabytes. Animations stay smooth because the window itself never resizes. Only the content inside it moves.
 
 You need Node 22 or newer and Rust (stable). On Windows, the Visual Studio Build Tools with the C++ workload and a Windows 11 SDK are required for linking.
 
@@ -84,6 +117,8 @@ npm run tauri dev  # the real app, run it in PowerShell
 npm run typecheck  # before every commit
 npm run i18n       # finds missing English strings (add --fix for TODO entries)
 ```
+
+In the browser, `?showcase` switches to English with curated demo data (music, Discord call, portfolio, chat). It is what the screenshots and the film above were captured from.
 
 To build a standalone executable:
 
@@ -105,12 +140,13 @@ The workflow builds the signed installer and publishes release `v1.1.0` with the
 
 Run Tauri commands from PowerShell. In Git Bash, `/usr/bin/link` shadows the MSVC linker and the build fails.
 
-## Project layout
+### Project layout
 
 ```
 src/            React frontend: notch shape, tools, design tokens, i18n
 src-tauri/      Rust backend: window, hit testing, tray and the Windows APIs
 scripts/        Helper scripts such as the i18n check
+docs/media/     Screenshots and the demo film used in this README
 ```
 
 ## License

@@ -14,6 +14,10 @@ import { startSystemPolling } from "./features/system/store";
 import { startGamingWatch } from "./features/system/gaming";
 import { startDiscord } from "./features/discord/store";
 import { startUpdateWatch } from "./lib/update";
+import { showcase } from "./dev/showcase-data";
+import { startShowcase } from "./dev/showcase";
+
+if (showcase) startShowcase();
 
 startDropListener();
 startFocusMode();

@@ -163,7 +163,7 @@ function FilesPanel() {
             <div key={f.path} className="flex h-8 items-center gap-2.5 border-b border-separator px-3 last:border-0">
               <I size={15} weight="duotone" className={`shrink-0 ${skipped ? "text-label-4" : "text-label-2"}`} />
               <span className={`min-w-0 flex-1 truncate text-footnote transition-colors duration-150 ${skipped ? "text-label-3" : "text-label"}`}>{f.name}</span>
-              {skipped && <span className="text-caption text-label-4">schon {target?.toUpperCase()}</span>}
+              {skipped && <span className="text-caption text-label-4">{t("schon {f}", { f: target?.toUpperCase() ?? "" })}</span>}
               <span className="tabular text-caption text-label-3">{formatBytes(f.size)}</span>
               <span className="flex w-4 justify-center">
                 {busy && !r && !skipped && (
@@ -198,7 +198,7 @@ function FilesPanel() {
             </span>
             {done[0]?.output && (
               <Button icon={FolderOpen} onClick={() => revealFile(done[0].output!)}>
-                Anzeigen
+                {t("Anzeigen")}
               </Button>
             )}
             <Button onClick={reset}>{t("Neu")}</Button>
@@ -243,7 +243,7 @@ function FilesPanel() {
                   <X size={12} weight="bold" />
                 </button>
                 <Button primary disabled={!target || busy || pending.length === 0 || (needsFfmpeg && !ffmpeg)} onClick={() => void run()}>
-                  {busy ? t("Wandle um …") : pending.length > 1 ? `${pending.length} umwandeln` : t("Umwandeln")}
+                  {busy ? t("Wandle um …") : pending.length > 1 ? t("{n} umwandeln", { n: pending.length }) : t("Umwandeln")}
                 </Button>
               </div>
             </div>
@@ -259,7 +259,7 @@ function FilesPanel() {
             exit={{ opacity: 0 }}
             transition={fade}
           >
-            Loslassen, um diese Dateien zu ersetzen
+            {t("Loslassen, um diese Dateien zu ersetzen")}
           </motion.div>
         )}
       </AnimatePresence>

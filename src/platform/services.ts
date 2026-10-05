@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { isNative } from "./native";
+import { showcase, showcaseCall, showcaseCash, showcaseDayChange, showcaseFileSizes, showcasePositions, showcaseRealized } from "../dev/showcase-data";
 
 /*
  * Bridges to the Rust services (src-tauri/src/*.rs). In the browser they return
@@ -72,8 +73,9 @@ export function localDate(d: Date): string {
 }
 
 async function mockTrading(): Promise<TradingData> {
-  await new Promise((r) => setTimeout(r, 450));
+  await new Promise((r) => setTimeout(r, showcase ? 160 : 450));
   if (!mockSecrets.has("t212.key")) throw "no-key";
+  if (showcase) return showcaseTrading();
   const positions: Position[] = [
     { ticker: "NVDA", name: "NVIDIA", quantity: 12, averagePrice: 98.4, currentPrice: 141.2, priceCurrency: "USD", value: 1458.3, cost: 1012.6, pnl: 445.7 },
     { ticker: "VUSA", name: "Vanguard S&P 500", quantity: 30, averagePrice: 88.1, currentPrice: 104.6, priceCurrency: "EUR", value: 3138.0, cost: 2643.0, pnl: 495.0 },
@@ -103,6 +105,35 @@ async function mockTrading(): Promise<TradingData> {
     const f = i / (steps - 1);
     const p = yesterday + (pnlNow - yesterday) * f + Math.sin(i * 0.09) * 18 * (1 - f) + Math.sin(i * 0.31) * 3;
     return { t: start.getTime() + i * 120_000, value: invested + cash + p - realized, pnl: i === steps - 1 ? pnlNow : p };
+  });
+  return { currency: "EUR", totalValue: currentValue + cash, cash, invested, currentValue, unrealized: currentValue - invested, realized, positions, history, intraday };
+}
+
+/** Showcase: 30 days of steady growth, today exactly +showcaseDayChange. */
+function showcaseTrading(): TradingData {
+  const positions: Position[] = showcasePositions;
+  const currentValue = Math.round(positions.reduce((s, p) => s + p.value, 0) * 100) / 100;
+  const invested = Math.round(positions.reduce((s, p) => s + p.cost, 0) * 100) / 100;
+  const cash = showcaseCash;
+  const realized = showcaseRealized;
+  const pnlNow = currentValue - invested + realized;
+  const yesterday = pnlNow - showcaseDayChange;
+  const history: Snapshot[] = [];
+  for (let i = 30; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const f = (30 - i) / 30;
+    // Rising trend with a dip in the middle; the last two points are fixed.
+    const pnl = i === 0 ? pnlNow : i === 1 ? yesterday : yesterday - 1450 * (1 - f) + Math.sin(i * 0.9) * 120 - Math.max(0, 1 - Math.abs(i - 14) / 5) * 380;
+    history.push({ date: localDate(d), value: invested + cash + pnl - realized, invested, pnl });
+  }
+  const start = new Date();
+  start.setHours(9, 0, 0, 0);
+  const steps = Math.max(2, Math.floor((Date.now() - start.getTime()) / 120_000));
+  const intraday = Array.from({ length: steps }, (_, i) => {
+    const f = i / (steps - 1);
+    const p = i === steps - 1 ? pnlNow : yesterday + showcaseDayChange * f + Math.sin(i * 0.8) * 46 * (1 - f) - Math.sin(f * Math.PI) * 60;
+    return { t: start.getTime() + i * 120_000, value: invested + cash + p - realized, pnl: p };
   });
   return { currency: "EUR", totalValue: currentValue + cash, cash, invested, currentValue, unrealized: currentValue - invested, realized, positions, history, intraday };
 }
@@ -232,7 +263,7 @@ export function probeFiles(paths: string[]): Promise<{ files: DroppedFile[]; ffm
             : /^(xlsx|xlsm|xls|ods|csv|tsv)$/.test(ext)
               ? "table"
               : "other";
-    return { path: p, name, kind, ext, size: 1_400_000 + name.length * 91_000 };
+    return { path: p, name, kind, ext, size: (showcase && showcaseFileSizes[name]) || 1_400_000 + name.length * 91_000 };
   });
   return Promise.resolve({ files, ffmpeg: false });
 }
@@ -452,25 +483,27 @@ export const mockDiscord = (() => {
       if (state.call) return set(null);
       set({
         channelId: "1",
-        channelName: "Zocken",
-        guildName: "Die Runde",
+        channelName: showcase ? showcaseCall.channelName : "Zocken",
+        guildName: showcase ? showcaseCall.guildName : "Die Runde",
         guildIcon: null,
         mute: false,
         deaf: false,
         speaking: false,
-        members: [
-          { id: "1", name: "Du", avatar: avatar(0), speaking: false, muted: false },
-          { id: "2", name: "Mara", avatar: avatar(1), speaking: false, muted: false },
-          { id: "3", name: "Jonas", avatar: avatar(2), speaking: false, muted: true },
-          { id: "4", name: "Lea", avatar: avatar(3), speaking: false, muted: false },
-        ],
+        members: showcase
+          ? showcaseCall.members.map((m) => ({ id: m.id, name: m.name, avatar: avatar(m.avatar), speaking: false, muted: m.id === "3" }))
+          : [
+              { id: "1", name: "Du", avatar: avatar(0), speaking: false, muted: false },
+              { id: "2", name: "Mara", avatar: avatar(1), speaking: false, muted: false },
+              { id: "3", name: "Jonas", avatar: avatar(2), speaking: false, muted: true },
+              { id: "4", name: "Lea", avatar: avatar(3), speaking: false, muted: false },
+            ],
       });
       // Take turns speaking so the rings are visible.
       let i = 0;
       talk = setInterval(() => {
         if (!state.call) return;
         i++;
-        const who = ["1", "2", "4", ""][i % 4];
+        const who = (showcase ? ["2", "4", "2", "1"] : ["1", "2", "4", ""])[i % 4];
         set({ ...state.call, speaking: who === "1" && !state.call.mute, members: state.call.members.map((m) => ({ ...m, speaking: m.id === who && !m.muted && !(m.id === "1" && state.call!.mute) })) });
       }, 1400);
     },

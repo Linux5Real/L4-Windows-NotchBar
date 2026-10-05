@@ -29,6 +29,7 @@ import { effortLevels, providerInfo } from "../ask/providers";
 import { discordState, reconnectDiscord } from "../discord/store";
 import { fps } from "../system/gaming";
 import { PlaceSearch } from "../weather/WeatherView";
+import { VaultSettings } from "../vault/VaultSettings";
 import { detectPlace } from "../weather/store";
 import { focusMode, setFocusMode } from "../../notch/focus";
 import { checkForUpdate, installUpdate, update } from "../../lib/update";
@@ -55,6 +56,7 @@ const sectionPage: Record<string, PageId> = {
   usage: "ai",
   discord: "accounts",
   trading: "accounts",
+  vault: "tools",
 };
 
 /** Last open page survives closing/opening the notch (the component is rebuilt). */
@@ -124,7 +126,12 @@ export function SettingsView() {
               </>
             )}
             {page === "display" && <Display />}
-            {page === "tools" && <Tools />}
+            {page === "tools" && (
+              <>
+                <Tools />
+                <VaultSettings />
+              </>
+            )}
             {page === "timer" && <Alarm />}
             {page === "ai" && (
               <>

@@ -4,7 +4,7 @@ import { mockDiscord, mockPrivacy, secrets } from "../platform/services";
 import { settings, updateSettings } from "../settings/store";
 
 /** Tools in the dock during the showcase, in this order. */
-const SHOWCASE_TOOLS = ["overview", "media", "discord", "trading", "ask", "convert", "clipboard", "timer", "weather", "shelf"];
+const SHOWCASE_TOOLS = ["overview", "media", "discord", "trading", "ask", "convert", "clipboard", "vault", "timer", "weather", "shelf"];
 
 /**
  * Browser only (`?showcase`): English UI, a curated dock and a demo depot key.

@@ -63,3 +63,12 @@ export const content = {
     ease: [0.23, 1, 0.32, 1],
   } satisfies Transition,
 } as const;
+
+/** "Wrong" (PIN): a short, damped side-to-side shake like the macOS login field. */
+export const shake = {
+  keyframes: ["translateX(0px)", "translateX(-9px)", "translateX(7px)", "translateX(-5px)", "translateX(3px)", "translateX(0px)"],
+  transition: { duration: 0.38 * slow, ease: "easeOut" } satisfies Transition,
+} as const;
+
+/** Countdowns that step once per second (2FA ring): linear, exactly one tick long. */
+export const tick = { duration: 1, ease: "linear" } satisfies Transition;

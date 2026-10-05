@@ -13,6 +13,7 @@ import {
   Sparkle,
   Timer,
   Tray,
+  Vault,
   type Icon,
 } from "@phosphor-icons/react";
 import { DepotIcon } from "../ui/icons";
@@ -31,6 +32,7 @@ import { UsageView } from "../features/usage/UsageView";
 import { WeatherView } from "../features/weather/WeatherView";
 import { SystemView } from "../features/system/SystemView";
 import { DiscordView } from "../features/discord/DiscordView";
+import { VaultView } from "../features/vault/VaultView";
 import { SettingsView } from "../features/settings/SettingsView";
 
 /**
@@ -65,6 +67,7 @@ export const tabs: NotchTab[] = [
   { id: "weather", label: "Wetter", icon: CloudSun, size: { w: 520, h: 250 }, View: WeatherView },
   { id: "system", label: "Hardware", icon: Cpu, size: { w: 600, h: 248 }, View: SystemView },
   { id: "discord", label: "Discord", icon: DiscordLogo, size: { w: 520, h: 210 }, View: DiscordView },
+  { id: "vault", label: "Tresor", icon: Vault, size: { w: 560, h: 324 }, View: VaultView },
 ];
 
 /** Settings: reached via the gear, not in the tool bar. */

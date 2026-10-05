@@ -15,6 +15,7 @@ pub mod secrets;
 mod system;
 mod trading;
 pub mod usage;
+mod vault;
 
 use std::sync::Mutex;
 
@@ -66,6 +67,7 @@ pub fn run() {
         .manage(system::SystemState::default())
         .manage(display::DisplayState::default())
         .manage(discord::DiscordState::default())
+        .manage(vault::VaultState::default())
         .invoke_handler(tauri::generate_handler![
             hit_test::set_hit_rect,
             hit_test::set_pinned,
@@ -106,6 +108,20 @@ pub fn run() {
             discord::discord_configure,
             discord::discord_action,
             discord::discord_state,
+            vault::vault_status,
+            vault::vault_setup,
+            vault::vault_unlock,
+            vault::vault_lock,
+            vault::vault_save_password,
+            vault::vault_add_totp,
+            vault::vault_delete,
+            vault::vault_reveal,
+            vault::vault_copy,
+            vault::vault_codes,
+            vault::vault_options,
+            vault::vault_change_pin,
+            vault::vault_reset,
+            vault::vault_scan,
             set_language,
             autostart_get,
             autostart_set,

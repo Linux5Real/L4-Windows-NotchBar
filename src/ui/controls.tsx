@@ -135,8 +135,14 @@ export function TextField(props: {
   secret?: boolean;
   onSubmit?: () => void;
   width?: string;
+  /** Shows a secret from outside (e.g. right after generating a password). */
+  revealed?: boolean;
+  autoFocus?: boolean;
 }) {
   const [reveal, setReveal] = useState(false);
+  useEffect(() => {
+    if (props.revealed !== undefined) setReveal(props.revealed);
+  }, [props.revealed]);
   return (
     <div
       className={`flex h-7 items-center gap-1 rounded-[8px] bg-fill-2 px-2 ${props.width ?? "w-44"}`}
@@ -147,6 +153,12 @@ export function TextField(props: {
         spellCheck={false}
         autoComplete="off"
         placeholder={props.placeholder}
+        ref={(el) => {
+          if (props.autoFocus && el && !el.dataset.focused) {
+            el.dataset.focused = "1";
+            el.focus({ preventScroll: true });
+          }
+        }}
         onChange={(e) => props.onChange(e.target.value)}
         onKeyDown={(e) => e.key === "Enter" && props.onSubmit?.()}
         className="min-w-0 flex-1 bg-transparent text-footnote text-label outline-none placeholder:text-label-4"

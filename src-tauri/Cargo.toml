@@ -34,6 +34,10 @@ texpresso = "2.0.2"
 zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
 quick-xml = "0.42.0"
 csv = "1.4.0"
+hmac = "0.12"
+sha1 = "0.10"
+sha2 = "0.10"
+rqrr = { version = "0.10", default-features = false }
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
 
@@ -58,6 +62,7 @@ windows = { version = "0.62", features = [
   "Win32_System_Registry",
   "Win32_System_Time",
   "Win32_Security_Credentials",
+  "Win32_Security_Cryptography",
   "Win32_Security",
   "Win32_Security_Authorization",
   "Win32_NetworkManagement_NetManagement",

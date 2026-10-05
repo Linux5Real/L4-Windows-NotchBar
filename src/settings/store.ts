@@ -56,9 +56,10 @@ export const TOOL_IDS = [
   "weather",
   "system",
   "discord",
+  "vault",
 ] as const;
 
-const DEFAULT_OFF = new Set<string>(["system", "discord", "trading"]);
+const DEFAULT_OFF = new Set<string>(["system", "discord", "trading", "vault"]);
 
 const defaults: Settings = {
   openMode: "hover",

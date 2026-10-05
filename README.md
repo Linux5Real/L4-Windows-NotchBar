@@ -147,7 +147,8 @@ Run Tauri commands from PowerShell. In Git Bash, `/usr/bin/link` shadows the MSV
 ```
 src/            React frontend: notch shape, tools, design tokens, i18n
 src-tauri/      Rust backend: window, hit testing, tray and the Windows APIs
-scripts/        Helper scripts such as the i18n check```
+scripts/        Helper scripts such as the i18n check
+```
 
 ## License
 

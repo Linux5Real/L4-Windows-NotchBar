@@ -15,7 +15,7 @@
 
 use std::sync::Mutex;
 use std::thread;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use base64::Engine;
 use serde::Serialize;
@@ -95,6 +95,9 @@ pub async fn media_control(state: State<'_, MediaState>, action: String, positio
 }
 
 const POLL: Duration = Duration::from_millis(400);
+/// How long after a track change the cover keeps being re-read, so a late one replaces
+/// whatever Windows showed first.
+const ARTWORK_SETTLE: Duration = Duration::from_secs(10);
 /// Drift beyond which a position counts as a seek and is sent again.
 const SEEK_THRESHOLD: f64 = 1.5;
 
@@ -102,9 +105,7 @@ pub fn spawn(app: AppHandle) {
     thread::spawn(move || {
         let mut last: Option<NowPlaying> = None;
         let mut last_sent_at = SystemTime::now();
-        // Only reload the cover when the title changes.
-        let mut artwork_key = String::new();
-        let mut artwork: Option<String> = None;
+        let mut artwork = Artwork { key: String::new(), since: Instant::now(), data: None };
 
         loop {
             let Ok(manager) = SessionManager::RequestAsync().and_then(|op| op.join()) else {
@@ -112,7 +113,7 @@ pub fn spawn(app: AppHandle) {
                 continue;
             };
             let shown = last.as_ref().map(|np| np.app_id.as_str()).unwrap_or_default();
-            let current = pick(&manager, shown).and_then(|session| read(&session, &mut artwork_key, &mut artwork).ok());
+            let current = pick(&manager, shown).and_then(|session| read(&session, &mut artwork).ok());
 
             if changed(&last, &current, last_sent_at) {
                 last_sent_at = SystemTime::now();
@@ -152,19 +153,28 @@ fn pick(manager: &SessionManager, shown: &str) -> Option<Session> {
         .or(current)
 }
 
-fn read(session: &Session, artwork_key: &mut String, artwork: &mut Option<String>) -> windows::core::Result<NowPlaying> {
+/// Cover of the shown track: reloaded on a track change and for a while after it.
+struct Artwork {
+    key: String,
+    since: Instant,
+    data: Option<String>,
+}
+
+fn read(session: &Session, artwork: &mut Artwork) -> windows::core::Result<NowPlaying> {
     let props = session.TryGetMediaPropertiesAsync()?.join()?;
     let title = props.Title()?.to_string();
     let artist = props.Artist()?.to_string();
     let app_id = session.SourceAppUserModelId()?.to_string();
 
     let key = format!("{app_id}\u{1}{title}\u{1}{artist}");
-    if *artwork_key != key {
-        *artwork_key = key;
-        *artwork = props.Thumbnail().ok().and_then(|t| load_thumbnail(&t).ok());
-    } else if artwork.is_none() {
-        // Some apps deliver the cover shortly after the title.
-        *artwork = props.Thumbnail().ok().and_then(|t| load_thumbnail(&t).ok());
+    if artwork.key != key {
+        artwork.key = key;
+        artwork.since = Instant::now();
+        artwork.data = props.Thumbnail().ok().and_then(|t| load_thumbnail(&t).ok());
+    } else if artwork.data.is_none() || artwork.since.elapsed() < ARTWORK_SETTLE {
+        // Some apps deliver the cover shortly after the title, and until then
+        // Windows may still hand out the previous track's cover (Spotifast).
+        artwork.data = props.Thumbnail().ok().and_then(|t| load_thumbnail(&t).ok());
     }
 
     let playback = session.GetPlaybackInfo()?;
@@ -186,19 +196,33 @@ fn read(session: &Session, artwork_key: &mut String, artwork: &mut Option<String
         position = position.clamp(0.0, duration);
     }
 
-    Ok(NowPlaying { title, artist, artwork: artwork.clone(), is_playing, position, duration, can_seek, app_id })
+    Ok(NowPlaying { title, artist, artwork: artwork.data.clone(), is_playing, position, duration, can_seek, app_id })
 }
 
 fn load_thumbnail(reference: &windows::Storage::Streams::IRandomAccessStreamReference) -> windows::core::Result<String> {
     let stream = reference.OpenReadAsync()?.join()?;
     let size = stream.Size()? as u32;
-    let mime = stream.ContentType().map(|m| m.to_string()).unwrap_or_default();
+    if size == 0 {
+        return Err(windows::core::Error::empty());
+    }
     let reader = DataReader::CreateDataReader(&stream)?;
     reader.LoadAsync(size)?.join()?;
     let mut bytes = vec![0u8; size as usize];
     reader.ReadBytes(&mut bytes)?;
-    let mime = if mime.is_empty() { "image/png".into() } else { mime };
-    Ok(format!("data:{mime};base64,{}", base64::engine::general_purpose::STANDARD.encode(bytes)))
+    Ok(format!("data:{};base64,{}", image_mime(&bytes), base64::engine::general_purpose::STANDARD.encode(bytes)))
+}
+
+/// MIME type from the image bytes. The stream's ContentType can't be trusted: for a file
+/// without an extension (Spotifast's cover cache) Windows reports "image/jpeg,image/jpe,image/jpg",
+/// and the commas break the data URL (issue #1).
+fn image_mime(bytes: &[u8]) -> &'static str {
+    match image::guess_format(bytes) {
+        Ok(image::ImageFormat::Jpeg) => "image/jpeg",
+        Ok(image::ImageFormat::WebP) => "image/webp",
+        Ok(image::ImageFormat::Gif) => "image/gif",
+        Ok(image::ImageFormat::Bmp) => "image/bmp",
+        _ => "image/png",
+    }
 }
 
 /// Only emit when something visible changed or the user seeked.

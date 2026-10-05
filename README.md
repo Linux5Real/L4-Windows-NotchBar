@@ -63,10 +63,6 @@ Passwords and two-factor codes, one hover away and encrypted on your PC.
   <img src="docs/media/vault-passwords.png" width="49%" alt="Saved passwords, one of them shown after entering the PIN" />
   <img src="docs/media/vault-2fa.png" width="49%" alt="Live 2FA codes with a countdown ring" />
 </p>
-<p>
-  <img src="docs/media/vault-add-2fa.png" width="49%" alt="Adding 2FA by pasting a QR code screenshot" />
-  <img src="docs/media/vault-generator.png" width="49%" alt="Password generator with length, digits and symbols" />
-</p>
 
 - **Passwords** with name and username or email. Copy either one with a click, show or edit the password, or let the generator create a strong one.
 - **2FA codes** with a live countdown. Screenshot the QR code (Win + Shift + S) and press **Ctrl + V**, or type the key, then name it.

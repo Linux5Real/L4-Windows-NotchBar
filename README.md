@@ -1,31 +1,50 @@
-# L4-Notchbar
-
-![L4-Notchbar: the open notch showing time, weather, music and volume at the top of a Windows desktop](docs/media/hero.png)
+<h1 align="center">L4-Notchbar</h1>
 
 <p align="center">
-  <img src="docs/media/demo.webp" alt="L4-Notchbar in action: music, overview and a Discord call" width="800" />
-  <br />
-  <a href="docs/media/demo.mp4"><b>Watch the full 44-second film (MP4)</b></a>
+  <b>Windows never had a Dynamic Island. Now it does.</b>
 </p>
 
-A Dynamic-Island-style notch for Windows. Windows never had one, so I built it. It sits at the top of your screen, stays out of the way until you need it, and opens on hover, click or **Ctrl + Alt + Space**. Music, timers, files, your portfolio and a Discord call are all one glance away.
+<p align="center">
+  <a href="https://github.com/Linux5Real/L4-Windows-NotchBar/releases/latest"><img src="https://img.shields.io/github/v/release/Linux5Real/L4-Windows-NotchBar?style=flat-square&label=release&color=111" alt="Latest release" /></a>
+  <img src="https://img.shields.io/badge/Windows-10%20%7C%2011-111?style=flat-square" alt="Windows 10 and 11" />
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-111?style=flat-square" alt="GPL-3.0" /></a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/Linux5Real/L4-Windows-NotchBar/releases/latest"><b>Download</b></a>
+  &nbsp;·&nbsp;
+  <a href="#what-it-does"><b>Features</b></a>
+  &nbsp;·&nbsp;
+  <a href="https://github.com/Linux5Real/L4-Windows-NotchBar/issues/new"><b>Suggest an idea</b></a>
+</p>
+
+https://github.com/user-attachments/assets/af40fec3-bc05-4ee3-9f90-fe30c86ed716
+
+A Dynamic-Island-style notch for Windows. It sits at the top of your screen, stays out of the way until you need it, and opens on hover, click or **Ctrl + Alt + Space**. Music, timers, files, your portfolio and a Discord call are all one glance away.
 
 It is small and fast: a single executable of a few megabytes, smooth animations, and everything you don't need can be hidden.
 
-**Missing something?** If you have an idea for a new tool, a feature you'd love to see or something that bugs you, just [open an issue](https://github.com/Linux5Real/L4-Windows-NotchBar/issues/new) and describe it. Every idea is welcome.
+> [!TIP]
+> **Missing something?** If you have an idea for a new tool, a feature you'd love to see or something that bugs you, just [open an issue](https://github.com/Linux5Real/L4-Windows-NotchBar/issues/new) and describe it. Every idea is welcome.
 
 ## What it does
 
-| | |
-| --- | --- |
-| ![Now Playing with cover, progress and equalizer](docs/media/now-playing.png) | ![Overview with time, weather, music and volume](docs/media/overview.png) |
-| **Now Playing** | **Overview** |
-| ![Discord call with speaking members and call controls](docs/media/discord.png) | ![Portfolio with value, daily change, holdings and a 30-day chart](docs/media/portfolio.png) |
-| **Discord** | **Portfolio** |
-| ![Ask: a question answered by Claude Opus 5.5](docs/media/ask.png) | ![Converter turning three PNGs into WebP](docs/media/converter.png) |
-| **Ask** | **Converter** |
-| ![Clipboard history with images, links, text and files](docs/media/clipboard.png) | |
-| **Clipboard** | |
+<p align="center">
+  <img src="docs/media/now-playing.png" width="49%" alt="Now Playing with cover, progress and equalizer" />
+  <img src="docs/media/overview.png" width="49%" alt="Overview with time, weather, music and volume" />
+</p>
+<p align="center">
+  <img src="docs/media/discord.png" width="49%" alt="Discord call with speaking members and call controls" />
+  <img src="docs/media/portfolio.png" width="49%" alt="Portfolio with value, daily change, holdings and a 30-day chart" />
+</p>
+<p align="center">
+  <img src="docs/media/ask.png" width="49%" alt="Ask: a question answered by Claude Opus 5.5" />
+  <img src="docs/media/converter.png" width="49%" alt="Converter turning three PNGs into WebP" />
+</p>
+<p align="center">
+  <img src="docs/media/clipboard.png" width="49%" alt="Clipboard history with images, links, text and files" />
+  <img src="docs/media/weather.png" width="49%" alt="Weather with current conditions and a 7-day forecast" />
+</p>
 
 ### Windows and system
 

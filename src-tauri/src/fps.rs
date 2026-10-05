@@ -6,13 +6,12 @@
 //!   DxgKrnl, so OpenGL (e.g. Minecraft Java) and Vulkan count too.
 //! - One frame can fire several of these events depending on the API, so each event
 //!   kind is counted separately and the highest count wins, never the sum.
-//! - Real-time ETW needs permissions. `fps_unlock` runs the app elevated once (UAC prompt
-//!   shows "L4-Notchbar") and gives the account:
-//!     1. ETW rights on our own session GUID and the three providers. These apply
-//!        immediately, no sign-out needed.
-//!     2. membership in "Performance Log Users" as a fallback (applies after the
-//!        next sign-in).
-//!   Without rights `gaming_fps` returns "no-admin" and retries every few seconds.
+//! - Real-time ETW needs admin rights or membership in "Performance Log Users".
+//!   `fps_unlock` runs the app elevated once (UAC prompt shows "L4-Notchbar") and adds
+//!   the account to that group. Windows only applies group changes to new sign-ins,
+//!   so until then `gaming_fps` returns "relogin"; without membership "no-admin".
+//!   (Per-GUID ETW rights via EventAccessControl don't help: creating a real-time
+//!   session still requires the group, tested on Windows 11.) Errors retry every few seconds.
 //! - The session only runs while polled (`IDLE`). It would survive a crash otherwise,
 //!   so a leftover session with the same name is stopped on start.
 
@@ -32,7 +31,7 @@ use windows::Win32::System::Diagnostics::Etw::{
 use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowThreadProcessId};
 
 const SESSION: &str = "NotchFps";
-/// Fixed session GUID; the ETW rights granted by `fps_unlock` are attached to it.
+/// Fixed session GUID.
 const SESSION_GUID: GUID = GUID::from_u128(0x6f3e2a41_8c5d_4b7e_9a12_4c4e6f746368);
 const DXGI: GUID = GUID::from_u128(0xca11c036_0102_4a2d_a6ad_f03cfed5d3c9);
 const D3D9: GUID = GUID::from_u128(0x783aca0a_790e_4d7f_8451_aa850511c6b9);
@@ -71,7 +70,7 @@ fn counter() -> &'static Mutex<Counter> {
 #[derive(Serialize)]
 pub struct Fps {
     fps: Option<f64>,
-    /// "no-admin" | "failed"
+    /// "no-admin" | "relogin" | "failed"
     error: Option<&'static str>,
 }
 
@@ -173,7 +172,11 @@ fn run() {
         status = unsafe { StartTraceW(&mut handle, PCWSTR(name.as_ptr()), props.ptr()) };
     }
     if status != ERROR_SUCCESS {
-        return fail(if status == ERROR_ACCESS_DENIED { "no-admin" } else { "failed" });
+        return fail(match status {
+            ERROR_ACCESS_DENIED if unlock::pending_relogin() => "relogin",
+            ERROR_ACCESS_DENIED => "no-admin",
+            _ => "failed",
+        });
     }
 
     // DxgKrnl is very chatty, so only the Present keyword. DXGI/D3D9 are quiet (0 = all).
@@ -241,7 +244,8 @@ unsafe extern "system" fn on_event(record: *mut EVENT_RECORD) {
 /// non-elevated process: with a standard account, a different admin account signs in
 /// at the UAC prompt, but this account is the one to unlock.
 ///
-/// Result: "ok" (FPS work now), "relogin" (after signing out), "cancelled", "failed".
+/// Result: "ok" (FPS work now, e.g. the app runs elevated), "relogin" (after signing
+/// out and back in), "cancelled", "failed".
 #[tauri::command]
 pub async fn fps_unlock() -> &'static str {
     tauri::async_runtime::spawn_blocking(|| {
@@ -271,19 +275,24 @@ mod unlock {
     use std::os::windows::ffi::OsStrExt;
 
     use windows::core::{w, PCWSTR, PWSTR};
+    use windows::core::BOOL;
     use windows::Win32::Foundation::{CloseHandle, HANDLE, HLOCAL, LocalFree, ERROR_CANCELLED, ERROR_SUCCESS};
-    use windows::Win32::NetworkManagement::NetManagement::{NetLocalGroupAddMembers, LOCALGROUP_MEMBERS_INFO_0};
-    use windows::Win32::Security::Authorization::{ConvertSidToStringSidW, ConvertStringSidToSidW};
-    use windows::Win32::Security::{GetTokenInformation, LookupAccountSidW, TokenUser, PSID, SID_NAME_USE, TOKEN_QUERY, TOKEN_USER};
-    use windows::Win32::System::Diagnostics::Etw::{
-        EventAccessControl, StartTraceW, CONTROLTRACE_HANDLE, EventSecurityAddDACL, TRACELOG_ACCESS_REALTIME, TRACELOG_CREATE_REALTIME,
-        TRACELOG_GUID_ENABLE,
+    use windows::Win32::NetworkManagement::NetManagement::{
+        NetApiBufferFree, NetLocalGroupAddMembers, NetLocalGroupGetMembers, LOCALGROUP_MEMBERS_INFO_0, MAX_PREFERRED_LENGTH,
     };
+    use windows::Win32::Security::Authorization::{ConvertSidToStringSidW, ConvertStringSidToSidW};
+    use windows::Win32::Security::{
+        CheckTokenMembership, GetTokenInformation, LookupAccountSidW, TokenUser, PSID, SID_NAME_USE, TOKEN_QUERY, TOKEN_USER,
+    };
+    use windows::Win32::System::Diagnostics::Etw::{StartTraceW, CONTROLTRACE_HANDLE};
     use windows::Win32::System::Threading::{GetCurrentProcess, GetExitCodeProcess, OpenProcessToken, WaitForSingleObject, INFINITE};
     use windows::Win32::UI::Shell::{ShellExecuteExW, SEE_MASK_NOCLOSEPROCESS, SHELLEXECUTEINFOW};
     use windows::Win32::UI::WindowsAndMessaging::SW_HIDE;
 
-    use super::{stop_session, wide, Props, D3D9, DXGI, DXGKRNL, SESSION_GUID};
+    use super::{stop_session, wide, Props};
+
+    /// Performance Log Users (well-known SID, the name is localized).
+    const LOG_USERS: windows::core::PCWSTR = w!("S-1-5-32-559");
 
     /// Already a member of the group (ERROR_MEMBER_IN_ALIAS).
     const MEMBER_IN_ALIAS: u32 = 1378;
@@ -299,11 +308,70 @@ mod unlock {
             let _ = CloseHandle(token);
             ok.ok()?;
             let user = &*(buf.as_ptr() as *const TOKEN_USER);
-            let mut text = PWSTR::null();
-            ConvertSidToStringSidW(user.User.Sid, &mut text).ok()?;
-            let sid = text.to_string().ok();
-            let _ = LocalFree(Some(HLOCAL(text.0.cast())));
-            sid
+            sid_string(user.User.Sid)
+        }
+    }
+
+    unsafe fn sid_string(sid: PSID) -> Option<String> {
+        let mut text = PWSTR::null();
+        unsafe { ConvertSidToStringSidW(sid, &mut text) }.ok()?;
+        let s = unsafe { text.to_string() }.ok();
+        let _ = unsafe { LocalFree(Some(HLOCAL(text.0.cast()))) };
+        s
+    }
+
+    /// Localized name of "Performance Log Users", null-terminated.
+    fn log_users_name() -> Option<[u16; 256]> {
+        unsafe {
+            let mut group_sid = PSID::default();
+            ConvertStringSidToSidW(LOG_USERS, &mut group_sid).ok()?;
+            let mut name = [0u16; 256];
+            let mut domain = [0u16; 256];
+            let (mut name_len, mut domain_len) = (name.len() as u32, domain.len() as u32);
+            let mut kind = SID_NAME_USE::default();
+            let found = LookupAccountSidW(
+                PCWSTR::null(),
+                group_sid,
+                Some(PWSTR(name.as_mut_ptr())),
+                &mut name_len,
+                Some(PWSTR(domain.as_mut_ptr())),
+                &mut domain_len,
+                &mut kind,
+            );
+            let _ = LocalFree(Some(HLOCAL(group_sid.0)));
+            found.ok().map(|_| name)
+        }
+    }
+
+    /// Unlocked, but not active yet: the account is in the group, this sign-in's
+    /// token isn't (Windows applies group changes only to new sign-ins).
+    pub fn pending_relogin() -> bool {
+        unsafe {
+            let mut group_sid = PSID::default();
+            if ConvertStringSidToSidW(LOG_USERS, &mut group_sid).is_err() {
+                return false;
+            }
+            let mut in_token = BOOL::default();
+            let active = CheckTokenMembership(None, group_sid, &mut in_token).is_ok() && in_token.as_bool();
+            let _ = LocalFree(Some(HLOCAL(group_sid.0)));
+            !active && is_listed_member()
+        }
+    }
+
+    /// Is the current account listed in the group (as stored, not as in the token)?
+    fn is_listed_member() -> bool {
+        let (Some(me), Some(group)) = (current_user_sid(), log_users_name()) else { return false };
+        unsafe {
+            let mut buf: *mut u8 = std::ptr::null_mut();
+            let (mut read, mut total) = (0u32, 0u32);
+            let status = NetLocalGroupGetMembers(PCWSTR::null(), PCWSTR(group.as_ptr()), 0, &mut buf, MAX_PREFERRED_LENGTH, &mut read, &mut total, None);
+            if status != 0 || buf.is_null() {
+                return false;
+            }
+            let members = std::slice::from_raw_parts(buf as *const LOCALGROUP_MEMBERS_INFO_0, read as usize);
+            let found = members.iter().any(|m| sid_string(m.lgrmi0_sid).is_some_and(|s| s == me));
+            let _ = NetApiBufferFree(Some(buf.cast()));
+            found
         }
     }
 
@@ -336,46 +404,19 @@ mod unlock {
         }
     }
 
-    /// In the elevated process: grant ETW rights and group membership.
+    /// In the elevated process: add the account to "Performance Log Users".
     pub fn grant(sid: &str) -> i32 {
+        let Some(group) = log_users_name() else { return 2 };
         unsafe {
             let mut psid = PSID::default();
             if ConvertStringSidToSidW(PCWSTR(wide(sid).as_ptr()), &mut psid).is_err() {
                 return 2;
             }
-            // 1. ETW rights: create + read the session, enable the providers. Effective immediately.
-            let mut ok = EventAccessControl(&SESSION_GUID, EventSecurityAddDACL.0 as u32, psid, TRACELOG_CREATE_REALTIME | TRACELOG_ACCESS_REALTIME, true)
-                == ERROR_SUCCESS.0;
-            for provider in [DXGI, D3D9, DXGKRNL] {
-                ok &= EventAccessControl(&provider, EventSecurityAddDACL.0 as u32, psid, TRACELOG_GUID_ENABLE, true) == ERROR_SUCCESS.0;
-            }
-            // 2. Group as a fallback (in case Windows doesn't check the GUID rights).
-            let grouped = add_to_log_users(psid);
+            let entry = LOCALGROUP_MEMBERS_INFO_0 { lgrmi0_sid: psid };
+            let status = NetLocalGroupAddMembers(PCWSTR::null(), PCWSTR(group.as_ptr()), 0, &entry as *const _ as *const u8, 1);
             let _ = LocalFree(Some(HLOCAL(psid.0)));
-            if ok || grouped { 0 } else { 2 }
+            if status == 0 || status == MEMBER_IN_ALIAS { 0 } else { 2 }
         }
-    }
-
-    unsafe fn add_to_log_users(member: PSID) -> bool {
-        // The group name is localized, so resolve it from the SID.
-        let mut group_sid = PSID::default();
-        if unsafe { ConvertStringSidToSidW(w!("S-1-5-32-559"), &mut group_sid) }.is_err() {
-            return false;
-        }
-        let mut name = [0u16; 256];
-        let mut domain = [0u16; 256];
-        let (mut name_len, mut domain_len) = (name.len() as u32, domain.len() as u32);
-        let mut kind = SID_NAME_USE::default();
-        let found = unsafe {
-            LookupAccountSidW(PCWSTR::null(), group_sid, Some(PWSTR(name.as_mut_ptr())), &mut name_len, Some(PWSTR(domain.as_mut_ptr())), &mut domain_len, &mut kind)
-        };
-        let _ = unsafe { LocalFree(Some(HLOCAL(group_sid.0))) };
-        if found.is_err() {
-            return false;
-        }
-        let entry = LOCALGROUP_MEMBERS_INFO_0 { lgrmi0_sid: member };
-        let status = unsafe { NetLocalGroupAddMembers(PCWSTR::null(), PCWSTR(name.as_ptr()), 0, &entry as *const _ as *const u8, 1) };
-        status == 0 || status == MEMBER_IN_ALIAS
     }
 
     /// Can this (non-elevated) process start a session now? Start one briefly and stop it.

@@ -1,6 +1,6 @@
 [package]
 name = "notch"
-version = "1.0.0"
+version = "1.0.1"
 edition = "2021"
 license = "GPL-3.0-only"
 
@@ -41,6 +41,7 @@ tauri-plugin-process = "2"
 webview2-com = "0.39"
 windows = { version = "0.62", features = [
   "Foundation",
+  "Foundation_Collections",
   "Media_Control",
   "UI_Shell",
   "Storage_Streams",

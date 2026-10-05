@@ -1,9 +1,17 @@
 //! Now Playing via GlobalSystemMediaTransportControls (GSMTC).
 //!
 //! Covers everything Windows shows in its volume flyout: Spotify, browsers
-//! (YouTube, SoundCloud …), Apple Music, VLC and so on. A thread polls the current
-//! session and emits `media://update` when something changes.
+//! (YouTube, SoundCloud …), Apple Music, VLC and so on. A thread polls the sessions
+//! and emits `media://update` when something changes.
 //! Polling instead of WinRT events: more robust when sessions switch, negligible cost.
+//!
+//! - The manager is requested fresh on every poll. A long-lived one goes stale when
+//!   an app recreates its session (Spotify closed to the tray, reopened), and then
+//!   keeps reporting the old status and position.
+//! - Which session is shown: a playing one wins (Windows' current first, then the
+//!   app shown before, then any). If nothing plays, the app shown before stays, so
+//!   pausing with a media key doesn't make it jump to another app.
+//! - Controls go to the shown app, not to whatever Windows considers current.
 
 use std::sync::Mutex;
 use std::thread;
@@ -36,19 +44,39 @@ pub struct NowPlaying {
     app_id: String,
 }
 
+/// Last emitted state and when it was emitted.
 #[derive(Default)]
-pub struct MediaState(Mutex<Option<NowPlaying>>);
+pub struct MediaState(Mutex<Option<(NowPlaying, SystemTime)>>);
 
+impl MediaState {
+    fn app_id(&self) -> String {
+        self.0.lock().unwrap().as_ref().map(|(np, _)| np.app_id.clone()).unwrap_or_default()
+    }
+}
+
+/// The current state, with the position extrapolated to now.
 #[tauri::command]
 pub fn media_get(state: State<'_, MediaState>) -> Option<NowPlaying> {
-    state.0.lock().unwrap().clone()
+    let (mut np, at) = state.0.lock().unwrap().clone()?;
+    if np.is_playing {
+        np.position += at.elapsed().map(|d| d.as_secs_f64()).unwrap_or(0.0);
+        if np.duration > 0.0 {
+            np.position = np.position.min(np.duration);
+        }
+    }
+    Some(np)
 }
 
 // Async so the blocking `join()` doesn't stall the main thread.
 #[tauri::command]
-pub async fn media_control(action: String, position: Option<f64>) -> Result<(), String> {
+pub async fn media_control(state: State<'_, MediaState>, action: String, position: Option<f64>) -> Result<(), String> {
+    let shown = state.app_id();
     let run = || -> windows::core::Result<()> {
-        let session = SessionManager::RequestAsync()?.join()?.GetCurrentSession()?;
+        let manager = SessionManager::RequestAsync()?.join()?;
+        let session = match sessions(&manager).into_iter().find(|s| app_id(s) == shown) {
+            Some(s) => s,
+            None => manager.GetCurrentSession()?,
+        };
         match action.as_str() {
             "toggle" => session.TryTogglePlayPauseAsync()?.join()?,
             "next" => session.TrySkipNextAsync()?.join()?,
@@ -72,13 +100,6 @@ const SEEK_THRESHOLD: f64 = 1.5;
 
 pub fn spawn(app: AppHandle) {
     thread::spawn(move || {
-        let manager = loop {
-            match SessionManager::RequestAsync().and_then(|op| op.join()) {
-                Ok(m) => break m,
-                Err(_) => thread::sleep(Duration::from_secs(2)),
-            }
-        };
-
         let mut last: Option<NowPlaying> = None;
         let mut last_sent_at = SystemTime::now();
         // Only reload the cover when the title changes.
@@ -86,19 +107,49 @@ pub fn spawn(app: AppHandle) {
         let mut artwork: Option<String> = None;
 
         loop {
-            let current = manager.GetCurrentSession().ok().and_then(|session| {
-                read(&session, &mut artwork_key, &mut artwork).ok()
-            });
+            let Ok(manager) = SessionManager::RequestAsync().and_then(|op| op.join()) else {
+                thread::sleep(Duration::from_secs(2));
+                continue;
+            };
+            let shown = last.as_ref().map(|np| np.app_id.as_str()).unwrap_or_default();
+            let current = pick(&manager, shown).and_then(|session| read(&session, &mut artwork_key, &mut artwork).ok());
 
             if changed(&last, &current, last_sent_at) {
-                *app.state::<MediaState>().0.lock().unwrap() = current.clone();
+                last_sent_at = SystemTime::now();
+                *app.state::<MediaState>().0.lock().unwrap() = current.clone().map(|np| (np, last_sent_at));
                 let _ = app.emit("media://update", &current);
                 last = current;
-                last_sent_at = SystemTime::now();
             }
             thread::sleep(POLL);
         }
     });
+}
+
+fn sessions(manager: &SessionManager) -> Vec<Session> {
+    manager.GetSessions().map(|list| list.into_iter().collect()).unwrap_or_default()
+}
+
+fn app_id(session: &Session) -> String {
+    session.SourceAppUserModelId().map(|id| id.to_string()).unwrap_or_default()
+}
+
+fn is_playing(session: &Session) -> bool {
+    session.GetPlaybackInfo().and_then(|p| p.PlaybackStatus()).is_ok_and(|s| s == PlaybackStatus::Playing)
+}
+
+/// The session to show; `shown` is the app shown so far (see the module docs).
+fn pick(manager: &SessionManager, shown: &str) -> Option<Session> {
+    let current = manager.GetCurrentSession().ok();
+    if current.as_ref().is_some_and(is_playing) {
+        return current;
+    }
+    let all = sessions(manager);
+    let by_shown = || all.iter().find(|s| app_id(s) == shown).cloned();
+    by_shown()
+        .filter(is_playing)
+        .or_else(|| all.iter().find(|s| is_playing(s)).cloned())
+        .or_else(by_shown)
+        .or(current)
 }
 
 fn read(session: &Session, artwork_key: &mut String, artwork: &mut Option<String>) -> windows::core::Result<NowPlaying> {

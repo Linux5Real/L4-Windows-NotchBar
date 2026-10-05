@@ -75,7 +75,16 @@ export function createNativeMedia(): MediaSource {
     state = { ...state, ...patch, updatedAt: performance.now() };
     notify();
   };
-  const control = (action: string, position?: number) => void invoke("media_control", { action, position });
+  // Rust only emits on changes. If the app ignored the command, nothing changes there
+  // and the optimistic state would stick, so take Rust's state again shortly after.
+  let resyncTimer: number | undefined;
+  const resync = () => {
+    window.clearTimeout(resyncTimer);
+    resyncTimer = window.setTimeout(() => void invoke<NativeNowPlaying | null>("media_get").then(apply), 1500);
+  };
+  const control = (action: string, position?: number) => {
+    void invoke("media_control", { action, position }).finally(resync);
+  };
 
   return {
     get: () => state,

@@ -12,6 +12,7 @@ import {
   SlidersHorizontal,
   Sparkle,
   SquaresFour,
+  SignOut,
   Stop,
   Timer,
   type Icon,
@@ -411,6 +412,11 @@ function Display() {
         />
       </Row>
       {fpsError === "no-admin" && <FpsUnlockRow />}
+      {fpsError === "relogin" && (
+        <Row label={t("FPS freischalten")} hint={t("Fertig – einmal ab- und wieder anmelden, dann laufen die FPS")}>
+          <SignOut size={18} weight="bold" className="text-orange" />
+        </Row>
+      )}
       <Row label={t("Aufnahme-Punkte")} hint={t("Grün: Mikrofon/Kamera aktiv · Rot: Bildschirm wird aufgenommen")}>
         <Switch label={t("Aufnahme-Punkte")} checked={s.privacyDots} onChange={(privacyDots) => updateSettings({ privacyDots })} />
       </Row>

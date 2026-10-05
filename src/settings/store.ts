@@ -58,7 +58,7 @@ export const TOOL_IDS = [
   "discord",
 ] as const;
 
-const DEFAULT_OFF = new Set<string>(["system", "discord"]);
+const DEFAULT_OFF = new Set<string>(["system", "discord", "trading"]);
 
 const defaults: Settings = {
   openMode: "hover",
@@ -76,12 +76,12 @@ const defaults: Settings = {
     },
   },
   weather: null,
-  display: { visibility: "hide-fullscreen", monitor: null, offset: 0 },
+  display: { visibility: "always", monitor: null, offset: 0 },
   gaming: { mode: "off" },
-  privacyDots: true,
+  privacyDots: false,
   discord: { clientId: "" },
   alarm: { sound: "chime", volume: 0.7, duration: 5 },
-  language: "de",
+  language: "en",
   updates: { auto: true },
 };
 

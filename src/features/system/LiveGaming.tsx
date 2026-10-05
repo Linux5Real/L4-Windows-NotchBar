@@ -1,5 +1,5 @@
 import { motion } from "motion/react";
-import { LockSimple } from "@phosphor-icons/react";
+import { LockSimple, SignOut } from "@phosphor-icons/react";
 import { content } from "../../design/motion";
 import { t } from "../../i18n";
 import { fps, useFpsPolling } from "./gaming";
@@ -28,10 +28,18 @@ export function LiveGaming() {
       exit={{ opacity: 0, filter: "blur(4px)", transition: content.exit }}
     >
       <div className="flex items-center gap-3">
-        <span className="flex items-baseline gap-1" title={f.error === "no-admin" ? t("FPS freischalten: Einstellungen → Darstellung") : undefined}>
+        <span className="flex items-baseline gap-1" title={hint(f.error)}>
           <span className="tabular flex w-[26px] justify-end text-footnote font-semibold text-label">
-            {/* Lock = no permission yet (Settings → Display), dash = no frame measured yet. */}
-            {f.error === "no-admin" ? <LockSimple size={11} weight="bold" className="self-center text-label-3" /> : f.value === null ? "–" : Math.round(f.value)}
+            {/* Lock = not unlocked yet (Settings → Display), sign-out = unlocked, active after the next sign-in, dash = no frame measured yet. */}
+            {f.error === "no-admin" ? (
+              <LockSimple size={11} weight="bold" className="self-center text-label-3" />
+            ) : f.error === "relogin" ? (
+              <SignOut size={11} weight="bold" className="self-center text-orange" />
+            ) : f.value === null ? (
+              "–"
+            ) : (
+              Math.round(f.value)
+            )}
           </span>
           <span className="text-caption font-medium text-label-3">FPS</span>
         </span>
@@ -43,6 +51,12 @@ export function LiveGaming() {
       </div>
     </motion.div>
   );
+}
+
+function hint(error: string | null): string | undefined {
+  if (error === "no-admin") return t("FPS freischalten: Einstellungen → Darstellung");
+  if (error === "relogin") return t("Einmal ab- und wieder anmelden, dann laufen die FPS");
+  return undefined;
 }
 
 function Stat({ label, value }: { label: string; value: number | null }) {

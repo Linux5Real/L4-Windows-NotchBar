@@ -1,18 +1,18 @@
-//! Quick Drop: echte Dateipfade für Drag & Drop aus dem Explorer.
+//! Quick drop: real file paths for drag and drop from Explorer.
 //!
-//! Tauris eigener Drop-Handler hängt sich beim Start an die WebView2-Kindfenster. Je nach
-//! WebView2-Version liegt das Fenster unter der Maus aber in einem anderen Prozess — dann
-//! antwortet WebView2 selbst, und weil Tauri externe Drops abschaltet, kommt nur das rote
-//! Verbotszeichen. Deshalb hier der offizielle WebView2-Weg: Das Frontend nimmt den Drop
-//! als normales HTML5-Drop an und reicht die `File`-Objekte per
-//! `chrome.webview.postMessageWithAdditionalObjects` durch; hier werden daraus Pfade.
+//! Tauri's own drop handler attaches to the WebView2 child windows at startup. Depending
+//! on the WebView2 version, the window under the cursor belongs to another process, so
+//! WebView2 answers itself and, since Tauri disables external drops, only shows the red
+//! "not allowed" cursor. So this uses the official WebView2 way: the frontend accepts a
+//! normal HTML5 drop and passes the `File` objects via
+//! `chrome.webview.postMessageWithAdditionalObjects`; here they become paths.
 
 use tauri::{Emitter, WebviewWindow};
 use webview2_com::Microsoft::Web::WebView2::Win32::{ICoreWebView2File, ICoreWebView2WebMessageReceivedEventArgs2};
 use webview2_com::WebMessageReceivedEventHandler;
 use windows::core::{Interface, PWSTR};
 
-/// Nachricht, die das Frontend mit den Dateien schickt (siehe `src/platform/drop.ts`).
+/// Message the frontend sends with the files (see `src/platform/drop.ts`).
 const MESSAGE: &str = "notch-drop";
 
 pub fn install(window: &WebviewWindow) {

@@ -10,12 +10,12 @@ import { copyFiles, filePreview, openFile, probeFiles, revealFile, type DroppedF
 import { t } from "../../i18n";
 
 /*
- * Ablage (File Shelf): Dateien auf die Notch legen, später mit einem Klick
- * öffnen, im Explorer zeigen oder per Strg+V woanders einfügen.
- * Gespeichert werden nur Verweise — die Dateien bleiben, wo sie sind.
+ * Shelf: put files on the notch and later open them with one click,
+ * show them in Explorer or paste them elsewhere with Ctrl+V.
+ * Only references are stored; the files stay where they are.
  *
- * Dateien kommen per Drag & Drop oder Strg+V (auch Screenshots). Fällt etwas auf die
- * geschlossene Notch, landet es im zuletzt genutzten Datei-Tool.
+ * Files come in via drag and drop or Ctrl+V (screenshots too). Anything dropped on
+ * the closed notch lands in the last used file tool.
  */
 interface ShelfItem extends DroppedFile {
   addedAt: number;
@@ -158,7 +158,7 @@ function Card({ item, copied, onCopy }: { item: ShelfItem; copied: boolean; onCo
   );
 }
 
-/** Zweiter Weg neben Drag & Drop — sichtbar, weil Strg+V nicht auffindbar ist. */
+/** Second path besides drag and drop, visible because Ctrl+V isn't discoverable. */
 export function PasteHint({ nothing }: { nothing: boolean }) {
   return (
     <button onClick={() => void pasteFiles()} className="pressable flex items-center gap-1 text-caption text-label-3 hover:text-label-2">

@@ -1,23 +1,23 @@
 export interface NowPlaying {
   title: string;
   artist: string;
-  /** Bild-URL des Covers (in der App: Data-URL aus dem GSMTC-Thumbnail). */
+  /** Cover image URL (in the app: data URL from the GSMTC thumbnail). */
   artwork: string | null;
-  /** Akzentfarbe aus dem Cover, steuert Equalizer & Fortschrittsbalken. */
+  /** Accent color from the cover, drives the equalizer & progress bar. */
   accent: string;
   isPlaying: boolean;
-  /** Position in Sekunden zum Zeitpunkt `updatedAt` (ms, performance.now()). */
+  /** Position in seconds at `updatedAt` (ms, performance.now()). */
   position: number;
-  /** Sekunden; 0 = unbekannt (Livestream, manche Browser-Player). */
+  /** Seconds; 0 = unknown (live stream, some browser players). */
   duration: number;
-  /** Erlaubt die Quelle Spulen? */
+  /** Does the source allow seeking? */
   canSeek: boolean;
   updatedAt: number;
 }
 
 /**
- * Brücke zur Medienquelle. Im Browser ein Mock, in Tauri die
- * Windows-API GlobalSystemMediaTransportControls (siehe docs/ARCHITECTURE.md).
+ * Bridge to the media source. A mock in the browser, in Tauri the
+ * Windows API GlobalSystemMediaTransportControls.
  */
 export interface MediaSource {
   get(): NowPlaying | null;
@@ -25,11 +25,11 @@ export interface MediaSource {
   toggle(): void;
   next(): void;
   previous(): void;
-  /** Springt zu `position` Sekunden. */
+  /** Seeks to `position` seconds. */
   seek(position: number): void;
 }
 
-/** Aktuelle Wiedergabeposition, aus dem letzten Stand hochgerechnet. */
+/** Current playback position, extrapolated from the last state. */
 export function livePosition(np: NowPlaying, now = performance.now()): number {
   if (!np.isPlaying) return np.position;
   const pos = np.position + (now - np.updatedAt) / 1000;

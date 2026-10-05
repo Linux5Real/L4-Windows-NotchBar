@@ -6,8 +6,8 @@ export type Levels = [number, number, number, number];
 type Listener = (levels: Levels) => void;
 
 /*
- * Echte Pegel aus dem Rust-Loopback (src-tauri/src/audio.rs).
- * Die Aufnahme läuft nur, solange mindestens ein sichtbarer Equalizer sie anfordert.
+ * Real levels from the Rust loopback (src-tauri/src/audio.rs).
+ * Capture only runs while at least one visible equalizer asks for it.
  */
 const listeners = new Set<Listener>();
 let wanted = 0;

@@ -4,16 +4,16 @@ import { Segmented, Select } from "../../ui/controls";
 import { locale, t } from "../../i18n";
 
 /*
- * Einheiten umrechnen (wie der Converter in OmniNotch): Länge, Gewicht,
- * Temperatur, Volumen, Tempo. Alles über einen Basiswert pro Kategorie;
- * Temperatur hat eigene Formeln.
+ * Unit conversion (like OmniNotch's converter): length, weight, temperature,
+ * volume, speed. Everything goes through one base value per category;
+ * temperature has its own formulas.
  */
 type Category = "length" | "mass" | "temp" | "volume" | "speed";
 
 interface Unit {
   id: string;
   label: string;
-  /** Faktor zur Basiseinheit (Meter, Kilogramm, Liter, m/s). */
+  /** Factor to the base unit (meter, kilogram, liter, m/s). */
   factor?: number;
 }
 
@@ -91,7 +91,7 @@ export function UnitsPanel() {
   const [[from, to], setPair] = useState(defaults.length);
   const [input, setInput] = useState("100");
 
-  // Komma und Punkt gelten beide als Dezimaltrenner (1,5 = 1.5).
+  // Comma and dot both work as decimal separators (1,5 = 1.5).
   const value = Number(input.replace(",", "."));
   const result = input.trim() === "" || Number.isNaN(value) ? null : convertUnit(cat, value, from, to);
   const options = units[cat].map((u) => ({ value: u.id, label: t(u.label) }));

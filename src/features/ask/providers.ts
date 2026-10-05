@@ -23,10 +23,10 @@ export const effortLevels: { value: AskEffort; label: string }[] = [
 ];
 
 /**
- * Antwort streamen. In der App über Rust (`ai_chat`, src-tauri/src/ai.rs) — der
- * Schlüssel bleibt dort. Im Browser eine lokale Demo, damit sich die Oberfläche
- * ohne App gestalten lässt.
- * Fehlercode "no-key" = kein Schlüssel für diesen Anbieter gespeichert.
+ * Streams a reply. In the app via Rust (`ai_chat`, src-tauri/src/ai.rs), so the key
+ * stays there. In the browser a local demo, so the UI can be designed without
+ * the app.
+ * Error code "no-key" = no key stored for this provider.
  */
 export async function streamChat(
   provider: AskProvider,

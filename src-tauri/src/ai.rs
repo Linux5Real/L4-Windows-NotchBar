@@ -1,13 +1,13 @@
-//! Ask: AI-Chat mit Streaming.
+//! Ask: AI chat with streaming.
 //!
-//! Anbieter:
-//! - `openrouter`, `openai`, `custom`: OpenAI-kompatibles `/chat/completions` (SSE).
-//!   Effort als `reasoning_effort` (OpenRouter: `reasoning.effort`).
-//! - `anthropic`: Claude Messages API (SSE), Effort als `output_config.effort`.
+//! Providers:
+//! - `openrouter`, `openai`, `custom`: OpenAI-compatible `/chat/completions` (SSE).
+//!   Effort as `reasoning_effort` (OpenRouter: `reasoning.effort`).
+//! - `anthropic`: Claude Messages API (SSE), effort as `output_config.effort`.
 //!
-//! Der Schlüssel kommt aus der Anmeldeinformationsverwaltung (`ai.<anbieter>`) und
-//! verlässt Rust nur im Authorization-Header. Teilstücke gehen als `ai://delta` an
-//! das Frontend; `ai_cancel` bricht einen laufenden Stream ab.
+//! The key comes from Credential Manager (`ai.<provider>`) and only leaves Rust in the
+//! Authorization header. Chunks go to the frontend as `ai://delta`; `ai_cancel` stops
+//! a running stream.
 
 use std::collections::HashSet;
 use std::sync::Mutex;
@@ -22,8 +22,8 @@ use crate::secrets;
 const SYSTEM_PROMPT: &str = "Du bist Ask, ein schneller Assistent in einer kleinen Notch am oberen Bildschirmrand. \
 Antworte knapp und direkt in der Sprache der Frage. Kein Markdown-Overhead: kurze Absätze, Listen nur wenn nötig.";
 
-/// Claude-Modelle, auf denen der Server bei einer Ablehnung automatisch auf ein
-/// passendes Modell ausweicht (`fallbacks: "default"`).
+/// Claude models where the server falls back to a suitable model on refusal
+/// (`fallbacks: "default"`).
 const CLAUDE_FALLBACK_MODELS: &[&str] = &["claude-opus-5-5", "claude-fable-5-1", "claude-opus-5", "claude-sonnet-5-5"];
 
 #[derive(Clone, Deserialize)]
@@ -69,7 +69,7 @@ pub fn ai_cancel(id: String, state: State<'_, AiState>) {
     state.cancelled.lock().unwrap().insert(id);
 }
 
-/// Kern ohne Tauri — auch für Backend-Tests nutzbar.
+/// Core without Tauri, so backend tests can use it too.
 pub async fn stream_chat(
     config: &ChatConfig,
     key: &str,
@@ -100,7 +100,7 @@ pub async fn stream_chat(
 
     let client = reqwest::Client::builder()
         .connect_timeout(Duration::from_secs(15))
-        // Reasoning-Modelle denken teils lange, bevor das erste Wort kommt.
+        // Reasoning models can think for a while before the first token.
         .read_timeout(Duration::from_secs(180))
         .build()
         .map_err(|e| e.to_string())?;
@@ -147,7 +147,7 @@ pub async fn stream_chat(
         return Err(http_error(status, &text));
     }
 
-    // SSE zeilenweise lesen; Pakete können mitten in einer Zeile enden.
+    // Read SSE line by line; a chunk can end mid-line.
     let mut buffer = String::new();
     while let Some(chunk) = res.chunk().await.map_err(|e| format!("Verbindung abgebrochen: {}", short(&e.to_string())))? {
         if cancelled() {

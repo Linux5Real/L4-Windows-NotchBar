@@ -1,12 +1,12 @@
-//! Quick-Drop-Converter: Dateien auf die Notch ziehen → in ein anderes Format wandeln.
+//! Quick-drop converter: drop files on the notch and convert them to another format.
 //!
-//! - Bilder (png, jpg, webp, bmp, gif, ico, tiff): direkt mit dem `image`-Crate.
-//! - DDS (Spiele-Texturen): Lesen über `image`, Schreiben selbst als BC3/DXT5 mit Mipmaps.
-//! - Audio/Video: über ffmpeg, falls installiert (PATH oder winget-Standardorte).
-//! - Dokumente und Tabellen: siehe `documents.rs`.
+//! - Images (png, jpg, webp, bmp, gif, ico, tiff): directly with the `image` crate.
+//! - DDS (game textures): read via `image`, written ourselves as BC3/DXT5 with mipmaps.
+//! - Audio/video: via ffmpeg if installed (PATH or the default winget locations).
+//! - Documents and spreadsheets: see `documents.rs`.
 //!
-//! Ausgabe landet neben dem Original; existiert der Name, wird " (1)", " (2)" … angehängt.
-//! Originale werden nie verändert.
+//! Output goes next to the original; if the name exists, " (1)", " (2)" … is appended.
+//! Originals are never modified.
 
 use std::fs::File;
 use std::io::BufWriter;
@@ -68,8 +68,8 @@ pub fn convert_probe(paths: Vec<String>) -> Probe {
     Probe { files, ffmpeg: ffmpeg().is_some() }
 }
 
-/// `quality`: 1–100 (nur JPEG und verlustbehaftetes Audio/Video relevant).
-/// `max_size`: längste Bildkante in px, optional (nur Bilder).
+/// `quality`: 1–100 (only matters for JPEG and lossy audio/video).
+/// `max_size`: optional longest image edge in px (images only).
 #[tauri::command]
 pub async fn convert_files(paths: Vec<String>, target: String, quality: Option<u8>, max_size: Option<u32>) -> Vec<Converted> {
     tauri::async_runtime::spawn_blocking(move || {
@@ -88,17 +88,17 @@ pub async fn convert_files(paths: Vec<String>, target: String, quality: Option<u
     .unwrap_or_default()
 }
 
-/// Datei mit dem Standardprogramm öffnen.
+/// Opens a file with its default app.
 #[tauri::command]
 pub fn open_path(path: String) -> Result<(), String> {
     if !Path::new(&path).exists() {
         return Err("Datei nicht mehr vorhanden".into());
     }
-    // `explorer <datei>` öffnet mit der verknüpften App, ohne Konsolenfenster.
+    // `explorer <file>` opens it with the associated app, without a console window.
     Command::new("explorer").arg(&path).spawn().map(|_| ()).map_err(|e| e.to_string())
 }
 
-/// Dateien in die Zwischenablage legen (Strg+V im Explorer fügt sie ein).
+/// Puts files on the clipboard (Ctrl+V in Explorer pastes them).
 #[tauri::command]
 pub fn copy_files(paths: Vec<String>) -> Result<(), String> {
     let files: Vec<PathBuf> = paths.into_iter().map(PathBuf::from).filter(|p| p.exists()).collect();
@@ -108,7 +108,7 @@ pub fn copy_files(paths: Vec<String>) -> Result<(), String> {
     arboard::Clipboard::new().and_then(|mut c| c.set().file_list(&files)).map_err(|e| e.to_string())
 }
 
-/// Vorschau für Bilddateien (PNG-Data-URL), sonst None.
+/// Preview for image files (PNG data URL), otherwise None.
 #[tauri::command]
 pub async fn file_preview(path: String) -> Option<String> {
     tauri::async_runtime::spawn_blocking(move || {
@@ -120,7 +120,7 @@ pub async fn file_preview(path: String) -> Option<String> {
     .flatten()
 }
 
-/// Datei im Explorer markiert anzeigen.
+/// Shows the file selected in Explorer.
 #[tauri::command]
 pub fn reveal_file(path: String) -> Result<(), String> {
     Command::new("explorer").arg(format!("/select,{path}")).spawn().map(|_| ()).map_err(|e| e.to_string())
@@ -148,7 +148,7 @@ fn convert_image(input: &Path, output: &Path, target: &str, quality: u8, max_siz
     if let Some(max) = max_size.filter(|&m| m > 0 && longest(&img) > m) {
         img = img.resize(max, max, image::imageops::FilterType::Lanczos3);
     }
-    // Icons sind auf 256 px begrenzt.
+    // Icons are capped at 256 px.
     if target == "ico" && longest(&img) > 256 {
         img = img.resize(256, 256, image::imageops::FilterType::Lanczos3);
     }
@@ -156,7 +156,7 @@ fn convert_image(input: &Path, output: &Path, target: &str, quality: u8, max_siz
     let file = File::create(output).map_err(|e| format!("Kann nicht speichern: {e}"))?;
     let mut writer = BufWriter::new(file);
     let result = match target {
-        // JPEG kann keine Transparenz → auf Weiß legen statt schwarzer Flächen.
+        // JPEG has no transparency: flatten onto white instead of black.
         "jpg" => DynamicImage::ImageRgb8(flatten_white(&img)).write_with_encoder(JpegEncoder::new_with_quality(&mut writer, quality)),
         "webp" => img.write_with_encoder(WebPEncoder::new_lossless(&mut writer)),
         "png" => img.write_to(&mut writer, ImageFormat::Png),
@@ -177,8 +177,8 @@ fn convert_image(input: &Path, output: &Path, target: &str, quality: u8, max_siz
     })
 }
 
-/// DDS als BC3 (DXT5, mit Alpha) inkl. Mipmap-Kette — das Format, das Spiele und Mods
-/// am häufigsten erwarten. `image` kann DDS nur lesen, daher selbst geschrieben.
+/// DDS as BC3 (DXT5, with alpha) including a mipmap chain, the format games and mods
+/// expect most. `image` can only read DDS, so we write it ourselves.
 fn write_dds(img: &DynamicImage, w: &mut impl std::io::Write) -> image::ImageResult<()> {
     let (width, height) = (img.width(), img.height());
     let levels = 32 - width.max(height).leading_zeros();
@@ -230,7 +230,7 @@ fn convert_media(input: &Path, output: &Path, target: &str, quality: u8) -> Resu
     let mut cmd = Command::new(ffmpeg);
     cmd.arg("-hide_banner").arg("-loglevel").arg("error").arg("-n").arg("-i").arg(input);
 
-    // Qualität 1–100 grob auf sinnvolle Encoder-Werte abbilden.
+    // Map quality 1–100 roughly onto sensible encoder values.
     let crf = (35 - (quality as i32 * 17 / 100)).to_string(); // 100 → 18, 50 → 27
     let kbps = format!("{}k", 96 + quality as u32 * 224 / 100); // 100 → 320k
     match target {
@@ -263,7 +263,7 @@ fn ffmpeg() -> Option<PathBuf> {
     if probe.output().is_ok_and(|o| o.status.success()) {
         return Some(PathBuf::from("ffmpeg"));
     }
-    // winget installiert nach %LOCALAPPDATA%\Microsoft\WinGet\Links
+    // winget installs to %LOCALAPPDATA%\Microsoft\WinGet\Links
     let links = PathBuf::from(std::env::var_os("LOCALAPPDATA")?).join("Microsoft\\WinGet\\Links\\ffmpeg.exe");
     links.is_file().then_some(links)
 }
@@ -295,7 +295,7 @@ fn kind_of(ext: &str) -> &'static str {
     }
 }
 
-/// "Foto.png" → "Foto.webp", oder "Foto (1).webp" falls belegt.
+/// "Photo.png" → "Photo.webp", or "Photo (1).webp" if taken.
 fn free_path(input: &Path, ext: &str) -> PathBuf {
     let dir = input.parent().unwrap_or(Path::new("."));
     let stem = input.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_else(|| "Datei".into());

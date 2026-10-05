@@ -5,13 +5,13 @@ import { createStore } from "../lib/store";
 import { isNative } from "./native";
 
 /*
- * Quick Drop: Dateien aus dem Explorer auf die Notch ziehen.
- * Überall ein normales HTML5-Drop. In der App reicht WebView2 die `File`-Objekte an Rust
- * weiter (`src-tauri/src/drop.rs`), das echte Pfade zurückschickt; im Browser gibt es nur
- * Dateinamen (zum Gestalten).
+ * Quick drop: drag files from Explorer onto the notch.
+ * A normal HTML5 drop everywhere. In the app WebView2 hands the `File` objects to Rust
+ * (`src-tauri/src/drop.rs`), which sends back real paths; the browser only gets
+ * file names (for design work).
  *
- * `dragging` steuert die Notch (öffnet sich zum Converter), `dropped` sind die Pfade,
- * die der Converter übernimmt und danach leert.
+ * `dragging` drives the notch (opens to the converter), `dropped` holds the paths
+ * the converter takes and then clears.
  */
 export const drop = createStore<{ dragging: boolean; dropped: string[] | null }>({ dragging: false, dropped: null });
 
@@ -22,8 +22,8 @@ export function takeDropped(): string[] | null {
 }
 
 /**
- * Strg+V: Dateien (oder ein kopiertes Bild/Screenshot) aus der Zwischenablage landen
- * genauso wie ein Drop im aktiven Tool. Gibt false zurück, wenn nichts Passendes drin war.
+ * Ctrl+V: files (or a copied image/screenshot) from the clipboard land in the active
+ * tool just like a drop. Returns false if there was nothing suitable.
  */
 export async function pasteFiles(): Promise<boolean> {
   const paths = isNative
@@ -34,7 +34,7 @@ export async function pasteFiles(): Promise<boolean> {
   return true;
 }
 
-/** Strg+V außerhalb von Textfeldern → `pasteFiles`. Für Ablage und Converter. */
+/** Ctrl+V outside text fields → `pasteFiles`. For Shelf and Converter. */
 export function usePasteFiles(onEmpty?: () => void) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -48,7 +48,7 @@ export function usePasteFiles(onEmpty?: () => void) {
   }, [onEmpty]);
 }
 
-/** WebView2-Brücke (nur in der App). */
+/** WebView2 bridge (app only). */
 const webview = (window as { chrome?: { webview?: { postMessageWithAdditionalObjects(msg: string, objects: unknown[]): void } } }).chrome?.webview;
 
 let started = false;
@@ -59,7 +59,7 @@ export function startDropListener() {
 
   if (isNative) void listen<string[]>("notch://drop", ({ payload }) => drop.set({ dragging: false, dropped: payload }));
 
-  // HTML5-Drag. Nur Dateien zählen, keine markierten Texte.
+  // HTML5 drag. Only files count, not selected text.
   let depth = 0;
   const hasFiles = (e: DragEvent) => e.dataTransfer?.types.includes("Files");
   window.addEventListener("dragenter", (e) => {
@@ -79,7 +79,7 @@ export function startDropListener() {
     depth = 0;
     const files = [...(e.dataTransfer?.files ?? [])];
     if (webview) {
-      // Pfade kommen asynchron als "notch://drop" zurück.
+      // Paths come back asynchronously as "notch://drop".
       drop.set((s) => ({ ...s, dragging: false }));
       webview.postMessageWithAdditionalObjects("notch-drop", files);
       return;

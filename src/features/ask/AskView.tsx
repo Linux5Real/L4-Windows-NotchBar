@@ -10,9 +10,9 @@ import { settings } from "../../settings/store";
 import { providerInfo, streamChat, type ChatMessage } from "./providers";
 import { t, tBackend } from "../../i18n";
 
-/** Unterhaltung lebt nur bis zum Neustart (kein Verlauf auf der Platte); × leert sie. */
+/** The conversation only lives until restart (no history on disk); × clears it. */
 const chat = createStore<ChatMessage[]>([]);
-// Ältere Versionen haben den Chat gespeichert → einmalig entfernen.
+// Older versions stored the chat; remove it once.
 localStorage.removeItem("notch:ask-chat");
 
 const quick: { icon: Icon; label: string; prompt: (text: string) => string }[] = [
@@ -24,12 +24,12 @@ const quick: { icon: Icon; label: string; prompt: (text: string) => string }[] =
 /*
  *   Ask                                    grok-4.7  [×] [📌]
  *   ┌───────────────────────────────────────────────┐
- *   │                         Wie spät ist es in NY? │
- *   │ Die Antwort …▍                                │
+ *   │                         What time is it in NY? │
+ *   │ The answer …▍                                 │
  *   └───────────────────────────────────────────────┘
- *   [ Frag etwas …                             (↑) ]
+ *   [ Ask anything …                           (↑) ]
  *
- * Anbieter, Modell und Effort stellt man nur in den Einstellungen ein.
+ * Provider, model and effort are only set in the settings.
  */
 export function AskView() {
   const messages = chat.use();
@@ -48,7 +48,7 @@ export function AskView() {
     return () => abort.current?.abort();
   }, []);
 
-  // Beim Streamen unten mitlaufen.
+  // Follow along at the bottom while streaming.
   useEffect(() => {
     list.current?.scrollTo({ top: list.current.scrollHeight });
   }, [messages]);
@@ -74,7 +74,7 @@ export function AskView() {
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setError(msg === "no-key" ? t("Kein API-Schlüssel für {p} – in den Einstellungen eintragen.", { p: providerInfo[provider].label }) : tBackend(msg));
-      // Leere Antwortblase wieder entfernen.
+      // Remove the empty reply bubble again.
       chat.set((m) => (m.at(-1)?.content === "" ? m.slice(0, -1) : m));
     } finally {
       setStreaming(false);
@@ -170,7 +170,7 @@ export function AskView() {
           placeholder={t("Frag etwas …")}
           onChange={(e) => {
             setDraft(e.target.value);
-            // Wächst bis 3 Zeilen mit.
+            // Grows up to 3 lines.
             e.target.style.height = "auto";
             e.target.style.height = `${Math.min(e.target.scrollHeight, 54)}px`;
           }}

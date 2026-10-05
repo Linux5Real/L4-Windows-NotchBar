@@ -12,9 +12,9 @@ import { HISTORY, system } from "./store";
  *   │ ▦ GPU      RTX 4070 Ti · 3,1 GB    _╱╲_____╱     31 %   │
  *   │ ◠ Ping     1.1.1.1                 ___╱╲____    14 ms   │
  *   └──────────────────────────────────────────────────────────┘
- * Wie OmniNotch: eine ruhige Karte mit Zeilen. Statt Balken eine Minute Verlauf als
- * Linie — man sieht, ob etwas gerade hochgeht oder dauerhaft hoch ist. Die Werte
- * sammelt `store.ts` ab App-Start, der Verlauf ist beim Öffnen also schon voll.
+ * Like OmniNotch: a calm card with rows. Instead of bars, one minute of history as a
+ * line, so you see whether something is spiking or staying high. `store.ts` collects
+ * the values from app start, so the history is already full when opened.
  */
 export function SystemView() {
   const { stats: s, history: h, tick } = system.use();
@@ -54,7 +54,7 @@ export function SystemView() {
   );
 }
 
-/** Ampel nur, wenn es kritisch wird — sonst bleibt alles monochrom. */
+/** Traffic-light colors only when it gets critical, otherwise everything stays monochrome. */
 export function levelColor(level: number): string {
   return level >= 90 ? "var(--color-red)" : level >= 70 ? "var(--color-orange)" : "var(--color-label)";
 }
@@ -83,9 +83,9 @@ function Row(props: { i: number; tick: number; icon: Icon; label: string; detail
 }
 
 /**
- * Verlaufslinie über eine Minute; Lücken (kein Wert) bleiben offen. Rechts = jetzt.
- * Die Linie ist einen Schritt nach rechts versetzt gezeichnet und gleitet pro Sekunde
- * gleichmäßig um diesen Schritt nach links — sie läuft durch, statt zu springen.
+ * One minute of history; gaps (no value) stay open. Right = now.
+ * The line is drawn one step to the right and glides left by that step every second,
+ * so it scrolls smoothly instead of jumping.
  */
 function Trend({ values, max, color, tick }: { values: number[]; max: number; color: string; tick: number }) {
   const w = 160;
@@ -108,7 +108,7 @@ function Trend({ values, max, color, tick }: { values: number[]; max: number; co
     <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="h-[22px] min-w-0 flex-1 overflow-hidden">
       <line x1="0" x2={w} y1={h - 1} y2={h - 1} stroke="var(--color-separator)" strokeWidth="1" vectorEffect="non-scaling-stroke" />
       <path
-        // Neuer Wert → neue Animation (key); vorher steht die Linie einen Schritt rechts.
+        // New value → new animation (key); before that the line sits one step to the right.
         key={tick}
         className="trend-scroll"
         d={d}

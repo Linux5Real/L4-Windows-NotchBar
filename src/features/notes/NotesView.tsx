@@ -6,7 +6,7 @@ import { t } from "../../i18n";
 
 const note = createStore("", { persist: "note" });
 
-/** Eine einzige Notiz, die sich selbst speichert — kein Speichern-Knopf. */
+/** A single note that saves itself, no save button. */
 export function NotesView() {
   const value = note.use();
   const [saved, setSaved] = useState(false);

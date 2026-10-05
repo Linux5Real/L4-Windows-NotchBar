@@ -1,11 +1,11 @@
-//! Echte Pegel für den Equalizer.
+//! Real levels for the equalizer.
 //!
-//! WASAPI-Loopback: Das Standard-Ausgabegerät wird als Eingang geöffnet und liefert
-//! genau das, was gerade aus den Lautsprechern kommt. Ein FFT über die letzten
-//! Samples ergibt 4 Frequenzbänder, die als `audio://levels` (0..1) gesendet werden.
+//! WASAPI loopback: the default output device is opened as an input and delivers
+//! exactly what is playing. An FFT over the latest samples gives 4 frequency bands,
+//! sent as `audio://levels` (0..1).
 //!
-//! Läuft nur, solange das Frontend es anfordert (Musik spielt und der Equalizer ist sichtbar).
-//! Es wird nichts gespeichert und nichts aufgezeichnet, die Samples liegen nur im Ringpuffer.
+//! Only runs while the frontend asks for it (music playing, equalizer visible).
+//! Nothing is stored or recorded; samples only live in the ring buffer.
 
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -19,11 +19,11 @@ use rustfft::{num_complex::Complex, FftPlanner};
 use tauri::{AppHandle, Emitter, State};
 
 const FFT_SIZE: usize = 1024;
-/// ~40 Bilder/s. Das Frontend interpoliert per CSS dazwischen.
+/// ~40 fps. The frontend interpolates with CSS.
 const TICK: Duration = Duration::from_millis(25);
-/// Bässe links → Höhen rechts, logarithmisch verteilt (Hz).
+/// Bass on the left, treble on the right, log-spaced (Hz).
 const BANDS: [(f32, f32); 4] = [(40.0, 160.0), (160.0, 600.0), (600.0, 2400.0), (2400.0, 9000.0)];
-/// Schnell hoch, langsamer runter, wie bei einem analogen Pegel.
+/// Fast attack, slower release, like an analog meter.
 const ATTACK: f32 = 0.55;
 const RELEASE: f32 = 0.18;
 
@@ -51,7 +51,7 @@ pub fn spawn(app: AppHandle, state: &AudioState) {
             .collect();
         let mut buffer = vec![Complex::new(0.0, 0.0); FFT_SIZE];
         let mut levels = [0.0f32; 4];
-        // Automatische Verstärkung pro Band: leise und laute Songs bewegen die Balken gleich stark.
+        // Auto gain per band so quiet and loud songs move the bars equally.
         let mut peaks = [1e-3f32; 4];
         let mut sample_rate = 48_000.0f32;
 
@@ -59,7 +59,7 @@ pub fn spawn(app: AppHandle, state: &AudioState) {
             thread::sleep(TICK);
 
             if !enabled.load(Ordering::Relaxed) {
-                // Aus: Aufnahme komplett schließen und Balken auf null.
+                // Off: close the capture and drop the bars to zero.
                 if capture.take().is_some() {
                     samples.lock().unwrap().clear();
                     levels = [0.0; 4];
@@ -68,7 +68,7 @@ pub fn spawn(app: AppHandle, state: &AudioState) {
                 continue;
             }
 
-            // Kopfhörer eingesteckt, Gerät gewechselt oder Fehler: neu verbinden.
+            // Headphones plugged in, device changed or error: reconnect.
             let device_changed = last_device_check.elapsed() > Duration::from_secs(2) && {
                 last_device_check = Instant::now();
                 let current = cpal::default_host().default_output_device().and_then(|d| d.id().ok());
@@ -85,7 +85,7 @@ pub fn spawn(app: AppHandle, state: &AudioState) {
                 }
             }
 
-            // Letzte FFT_SIZE Samples holen. Fehlt etwas (Loopback liefert bei Stille nichts), mit Nullen auffüllen.
+            // Take the last FFT_SIZE samples, zero-padded (loopback sends nothing during silence).
             {
                 let mut ring = samples.lock().unwrap();
                 let missing = FFT_SIZE.saturating_sub(ring.len());
@@ -93,7 +93,7 @@ pub fn spawn(app: AppHandle, state: &AudioState) {
                     let s = if i < missing { 0.0 } else { ring[i - missing] };
                     *slot = Complex::new(s * window[i], 0.0);
                 }
-                // Verbrauchte Samples raus, damit Stille wirklich als Stille erkannt wird.
+                // Drop consumed samples so silence is detected as silence.
                 let keep = FFT_SIZE / 2;
                 while ring.len() > keep {
                     ring.pop_front();
@@ -110,7 +110,7 @@ pub fn spawn(app: AppHandle, state: &AudioState) {
                 let energy: f32 = buffer[from..to.max(from + 1)].iter().map(|c| c.norm()).sum::<f32>() / (to - from).max(1) as f32;
 
                 peaks[band] = energy.max(peaks[band] * 0.996).max(1e-3);
-                // Unter dem Grundrauschen gilt es als Stille.
+                // Below the noise floor counts as silence.
                 let target = if energy < 2e-3 { 0.0 } else { (energy / peaks[band]).powf(0.8).min(1.0) };
                 let k = if target > levels[band] { ATTACK } else { RELEASE };
                 levels[band] += (target - levels[band]) * k;
@@ -120,7 +120,7 @@ pub fn spawn(app: AppHandle, state: &AudioState) {
     });
 }
 
-/// Loopback-Stream auf dem Standard-Ausgabegerät öffnen. Schreibt Mono-Samples in `samples`.
+/// Opens a loopback stream on the default output device. Writes mono samples to `samples`.
 fn open(samples: Arc<Mutex<VecDeque<f32>>>, failed: Arc<AtomicBool>) -> Option<(Stream, f32, Option<cpal::DeviceId>)> {
     let device = cpal::default_host().default_output_device()?;
     let id = device.id().ok();
@@ -140,7 +140,7 @@ fn open(samples: Arc<Mutex<VecDeque<f32>>>, failed: Arc<AtomicBool>) -> Option<(
     };
     let on_error = move |_| failed.store(true, Ordering::Relaxed);
 
-    // Shared-Mode-Mixformat ist praktisch immer f32; i16 als Rückfall.
+    // The shared-mode mix format is almost always f32; i16 as a fallback.
     let stream = match supported.sample_format() {
         SampleFormat::F32 => device.build_input_stream::<f32, _, _>(
             config,

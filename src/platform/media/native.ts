@@ -3,7 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { accentFrom } from "../../lib/accent";
 import type { MediaSource, NowPlaying } from "./types";
 
-/** So kommt es aus Rust (src-tauri/src/media.rs). */
+/** Shape of the data from Rust (src-tauri/src/media.rs). */
 interface NativeNowPlaying {
   title: string;
   artist: string;
@@ -23,10 +23,10 @@ export function createNativeMedia(): MediaSource {
   let state: NowPlaying | null = null;
   const listeners = new Set<() => void>();
   const notify = () => listeners.forEach((l) => l());
-  // Nach einem Sprung kurz die alten Positionen aus Rust ignorieren, sonst springt der Balken zurück.
+  // Ignore Rust's old positions briefly after a seek, otherwise the bar jumps back.
   let seekGuardUntil = 0;
-  // Neuer Song kommt oft erst ohne Cover (GSMTC liefert es ~0,5 s später): so lange das
-  // alte stehen lassen statt kurz auf das Noten-Symbol zu springen.
+  // A new track often arrives without a cover (GSMTC sends it ~0.5 s later): keep the
+  // old one meanwhile instead of flashing the note icon.
   let artHoldUntil = 0;
   let artHoldTimer: number | undefined;
   const ART_HOLD_MS = 1500;
@@ -47,12 +47,12 @@ export function createNativeMedia(): MediaSource {
         artHoldUntil = performance.now() + ART_HOLD_MS;
         const raw = np;
         window.clearTimeout(artHoldTimer);
-        // Kam bis dahin nichts Neueres (also auch kein Cover), den Stand ohne Cover übernehmen.
+        // Nothing newer (including a cover) by then → take the state without a cover.
         artHoldTimer = window.setTimeout(() => lastRaw === raw && apply(raw), ART_HOLD_MS + 50);
       }
       if (performance.now() < artHoldUntil) np = { ...np, artwork: state.artwork };
     }
-    // Akzent vom bisherigen Cover behalten, bis der neue berechnet ist — kein Aufblitzen.
+    // Keep the accent of the previous cover until the new one is computed, no flash.
     const sameArtwork = state?.artwork === np.artwork;
     state = { ...np, accent: sameArtwork && state ? state.accent : "#ffffff", updatedAt: performance.now() };
     notify();
@@ -69,7 +69,7 @@ export function createNativeMedia(): MediaSource {
   void invoke<NativeNowPlaying | null>("media_get").then(apply);
   void listen<NativeNowPlaying | null>("media://update", (e) => apply(e.payload));
 
-  // Sofort reagieren statt auf GSMTC zu warten (~400 ms) — Rust korrigiert danach.
+  // React immediately instead of waiting for GSMTC (~400 ms); Rust corrects afterwards.
   const optimistic = (patch: Partial<NowPlaying>) => {
     if (!state) return;
     state = { ...state, ...patch, updatedAt: performance.now() };

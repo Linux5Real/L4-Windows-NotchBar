@@ -20,7 +20,7 @@ import { findTab, settingsTab, tabs, type NotchTab } from "./tabs";
 import { holdOpen, pinned, togglePin, useNotchState, type NotchStatus } from "./useNotchState";
 import { t } from "../i18n";
 
-/** War die Notch höchstens so lange zu, öffnet sie wieder beim zuletzt genutzten Tool. */
+/** If the notch was closed at most this long, it reopens on the last used tool. */
 const RESUME_MS = 60_000;
 
 export function Notch() {
@@ -29,18 +29,18 @@ export function Notch() {
   const toolSettings = settings.use().tools;
   const visible = toolSettings.filter((t) => t.enabled).map((t) => findTab(t.id)).filter((t): t is NotchTab => !!t);
   const { tabId } = nav.use();
-  // Ausgeblendetes Tool aktiv (z. B. gerade deaktiviert) → erstes sichtbares.
+  // Hidden tool active (e.g. just disabled) → first visible one.
   const tab = tabId === settingsTab.id ? settingsTab : (visible.find((t) => t.id === tabId) ?? visible[0] ?? tabs[0]);
   const np = useNowPlaying();
   const live = useLiveActivity();
 
-  // Wie bei der Dynamic Island: Öffnen springt zum Tool der laufenden Aktivität —
-  // aber nur nach einer Pause. Kurz zu (Schlüssel kopieren, Datei holen) → man landet
-  // wieder dort, wo man war, z. B. in den Einstellungen.
-  // Layout-Effect läuft vor dem Zeichnen → kein Frame mit der alten Tab-Größe.
+  // Like the Dynamic Island: opening jumps to the running activity's tool,
+  // but only after a pause. Closed briefly (copying a key, grabbing a file) → you
+  // land where you were, e.g. in the settings.
+  // Layout effect runs before paint → no frame with the old tab size.
   const prevStatus = useRef(status);
   const closedAt = useRef(0);
-  // Ziel-Tool aus dem Tray (Eintrag für die Einstellungen) hat Vorrang vor der Live-Aktivität.
+  // A target tool from the tray (settings entry) takes priority over the live activity.
   const trayTab = useRef<string | null>(null);
   useLayoutEffect(() => {
     if (status === "open" && prevStatus.current !== "open") {
@@ -61,7 +61,7 @@ export function Notch() {
   const sticky = useStickyHitZone(status, size.h);
   const transition = useTransitionFor(status, shape);
 
-  // Klick außerhalb schließt (im Browser die Fake-Desktopfläche, in Tauri das Fenster-Blur).
+  // Click outside closes (in the browser the fake desktop, in Tauri the window blur).
   const hitRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const onDown = (e: PointerEvent) => {
@@ -78,24 +78,24 @@ export function Notch() {
   useNativeBridge(hitRef, onPointerEnter, onPointerLeave);
   const drag = useDragToMove(status);
 
-  // Fokus-Modus an → Notch zu, kein Hover mehr.
+  // Focus mode on → notch closes, no more hover.
   useEffect(() => {
     if (focus) close();
   }, [focus, close]);
 
-  // Drei schnelle Klicks schalten den Fokus-Modus (im Browser auch wieder aus; nativ zählt Rust).
+  // Three quick clicks toggle focus mode (in the browser also off; natively Rust counts).
   const onClick = (e: React.MouseEvent) => {
     if (drag.moved()) return;
     if (e.detail >= FOCUS_CLICKS && !isInteractive(e.target)) return setFocusMode(!focus);
     if (!focus && status !== "open") open();
   };
 
-  // Tastenkürzel: öffnen holt den Fokus (Esc, Tippen), schließen gibt ihn zurück.
+  // Shortcut: opening takes focus (Esc, typing), closing gives it back.
   useEffect(() => onShortcut(() => toggle() === "open" && keyboardFocus(true)), [toggle]);
   useEffect(
     () =>
       onTrayOpen((tab) => {
-        // Nur merken, wenn sie gerade aufgeht — sonst bliebe es fürs nächste Öffnen hängen.
+        // Only remember it while opening, otherwise it would stick for the next open.
         trayTab.current = status === "open" ? null : tab;
         if (tab) navigate(tab);
         open();
@@ -107,7 +107,7 @@ export function Notch() {
     if (status === "closed") keyboardFocus(false);
   }, [status]);
 
-  // 1–9 wechselt das Tool, solange offen und nicht getippt wird.
+  // 1–9 switches tools while open and not typing.
   useEffect(() => {
     if (status !== "open") return;
     const onKey = (e: KeyboardEvent) => {
@@ -122,10 +122,10 @@ export function Notch() {
   return (
     <div
       className="pointer-events-none fixed inset-x-0 top-0 z-50 flex justify-center transition-opacity duration-200"
-      // Im Browser verschiebt die Notch sich im Fenster; nativ wandert das ganze Fenster (display.rs).
+      // In the browser the notch moves inside the window; natively the whole window moves (display.rs).
       style={{ ["--accent" as string]: np?.accent, opacity: focus ? 0.5 : 1, transform: isNative ? undefined : `translateX(${drag.offset}px)` }}
     >
-      {/* Trefferzone: größer als die sichtbare Form (Fitts) und bündig mit der Oberkante. */}
+      {/* Hit zone: bigger than the visible shape (Fitts) and flush with the top edge. */}
       <div
         ref={hitRef}
         data-notch-hit
@@ -133,7 +133,7 @@ export function Notch() {
         style={{ minHeight: sticky.minHeight, cursor: drag.dragging ? "grabbing" : undefined }}
         onPointerMove={sticky.onPointerMove}
         onPointerDown={focus ? undefined : drag.onPointerDown}
-        // In Tauri kommt Hover aus dem Rust-Poll (useNativeBridge), nicht aus dem DOM.
+        // In Tauri, hover comes from the Rust poll (useNativeBridge), not the DOM.
         onPointerEnter={isNative || focus ? undefined : onPointerEnter}
         onPointerLeave={isNative || focus ? undefined : onPointerLeave}
         onClick={onClick}
@@ -176,11 +176,11 @@ export function Notch() {
   );
 }
 
-/** Kopfzeile: Titel des Tools links, Aktionen + Pinnadel rechts. Die Mitte (Kamera) bleibt frei. */
+/** Header: tool title on the left, actions + pin on the right. The middle (camera) stays free. */
 function Header({ title, onDragStart }: { title: string; onDragStart: (e: React.PointerEvent) => void }) {
   const isPinned = pinned.use();
   return (
-    // Freie Fläche der Kopfzeile = Griff zum Verschieben.
+    // Empty header space = drag handle.
     <div data-drag-handle onPointerDown={onDragStart} className="flex shrink-0 items-center justify-between gap-3 pr-3 pl-5" style={{ height: HEADER_HEIGHT + 4 }}>
       <div className="relative min-w-0 flex-1">
         <AnimatePresence mode="popLayout" initial={false}>
@@ -196,7 +196,7 @@ function Header({ title, onDragStart }: { title: string; onDragStart: (e: React.
         </AnimatePresence>
       </div>
       <div className="flex items-center gap-1">
-        {/* Tools rendern hier per <HeaderActions> (src/notch/header.tsx). Grid stapelt alte und neue beim Wechsel. */}
+        {/* Tools render here via <HeaderActions> (src/notch/header.tsx). The grid stacks old and new during a switch. */}
         <div ref={(el) => headerSlot.set(el)} className="grid" />
         <HeaderButton label={t("Fokus-Modus (3× klicken zum Beenden)")} onClick={() => setFocusMode(true)}>
           <Selection size={14} weight="bold" />
@@ -209,7 +209,7 @@ function Header({ title, onDragStart }: { title: string; onDragStart: (e: React.
   );
 }
 
-/** Tool-Leiste unten (wie OmniNotch). Zahnrad am Ende schaltet zwischen Einstellungen und dem letzten Tool. */
+/** Tool bar at the bottom (like OmniNotch). The gear at the end toggles between settings and the last tool. */
 function Dock({ tabs, activeId }: { tabs: NotchTab[]; activeId: string }) {
   const lastTool = useRef(tabs[0]?.id);
   if (activeId !== settingsTab.id) lastTool.current = activeId;
@@ -227,7 +227,7 @@ function Dock({ tabs, activeId }: { tabs: NotchTab[]; activeId: string }) {
         icon={GearSix}
         active={inSettings}
         badge={updateReady}
-        // Punkt am Zahnrad = Update bereit → direkt zum Abschnitt springen.
+        // Dot on the gear = update ready → jump straight to that section.
         onClick={() => (inSettings ? navigate(lastTool.current ?? tabs[0].id) : navigate(settingsTab.id, updateReady ? "updates" : null))}
       />
     </div>
@@ -247,7 +247,7 @@ function DockButton(props: { label: string; icon: NotchTab["icon"]; active: bool
     >
       {props.active && <motion.span layoutId="dock-pill" className="absolute inset-0 rounded-[10px] bg-fill-2" transition={springs.snappy} />}
       <I size={16} weight={props.active ? "fill" : "bold"} className="relative" />
-      {/* Hinweis-Punkt (z. B. Update verfügbar) oben rechts am Symbol. */}
+      {/* Badge dot (e.g. update available) at the icon's top right. */}
       <AnimatePresence>
         {props.badge && (
           <motion.span
@@ -264,10 +264,10 @@ function DockButton(props: { label: string; icon: NotchTab["icon"]; active: bool
 }
 
 /**
- * Mit dem Dock unten wandert es bei einem kürzeren Tool nach oben — die Maus stünde
- * plötzlich außerhalb und die Notch ginge zu. Deshalb schrumpft die Trefferzone erst
- * mit, sobald die Maus wieder über der Form ist (oder die Notch zugeht).
- * Gilt auch nativ: Rust bekommt das Rechteck dieser Zone gemeldet.
+ * With the dock at the bottom, a shorter tool moves it up, so the cursor would
+ * suddenly be outside and the notch would close. So the hit zone only shrinks
+ * once the cursor is back over the shape (or the notch closes).
+ * Applies natively too: Rust gets this zone's rectangle.
  */
 function useStickyHitZone(status: NotchStatus, height: number) {
   const [minHeight, setMinHeight] = useState<number | undefined>(undefined);
@@ -289,21 +289,21 @@ function useStickyHitZone(status: NotchStatus, height: number) {
   return { minHeight, onPointerMove };
 }
 
-/** pb-3 der Trefferzone. */
+/** pb-3 of the hit zone. */
 const HIT_PAD_BOTTOM = 12;
 
 function shapeFor(status: NotchStatus, live: string | null, size: { w: number; h: number }): NotchGeometry {
   if (status === "open") return openGeometry(size.w, size.h);
   const base = live === "system" ? geometry.gaming : live ? geometry.live : geometry.closed;
   if (status === "peek") {
-    // Hover-Bestätigung relativ zur aktuellen Breite, damit sie auch im Live-Zustand passt.
+    // Hover nudge relative to the current width so it also fits the live state.
     const bump = geometry.peek.w - geometry.closed.w;
     return { ...geometry.peek, w: base.w + bump };
   }
   return base;
 }
 
-/** Wählt die Spring passend zum Übergang (Öffnen ≠ Schließen ≠ Morphen). */
+/** Picks the spring for the transition (open ≠ close ≠ morph). */
 function useTransitionFor(status: NotchStatus, shape: NotchGeometry): Transition {
   const prev = useRef(status);
   const key = `${shape.w}x${shape.h}`;
@@ -314,7 +314,7 @@ function useTransitionFor(status: NotchStatus, shape: NotchGeometry): Transition
   else if (status === "peek") t = springs.peek;
   else t = prev.current === "open" ? springs.close : springs.morph;
 
-  // Nur übernehmen, wenn sich die Form tatsächlich ändert — sonst bleibt die laufende Spring.
+  // Only switch when the shape actually changes, otherwise the running spring continues.
   const stable = useRef(t);
   if (prevKey.current !== key) stable.current = t;
 
@@ -327,13 +327,13 @@ function useTransitionFor(status: NotchStatus, shape: NotchGeometry): Transition
 }
 
 /**
- * Quick Drop: Dateien über die Notch ziehen → sie öffnet sich bei Ablage oder Converter
- * (je nachdem, was zuletzt genutzt wurde).
- * Abgebrochenes Ziehen schließt sie wieder, wenn sie nur dafür aufging.
+ * Quick drop: drag files over the notch and it opens on Shelf or Converter
+ * (whichever was used last).
+ * A cancelled drag closes it again if it only opened for that.
  */
 function useQuickDrop(status: NotchStatus, open: () => void, dismiss: () => void) {
   const openedByDrag = useRef(false);
-  // Drop landet im zuletzt genutzten Datei-Tool (Ablage oder Converter).
+  // Drops land in the last used file tool (Shelf or Converter).
   const fileTool = useRef<"shelf" | "convert">("convert");
   useEffect(
     () =>
@@ -361,7 +361,7 @@ function useQuickDrop(status: NotchStatus, open: () => void, dismiss: () => void
           const current = nav.get().tabId;
           if (current !== "shelf" && current !== "convert") navigate(fileTool.current);
         } else if (!dragging && holding.current) {
-          // Ziehen vorbei: fallen gelassen → offen lassen, abgebrochen → wieder zu.
+          // Drag over: dropped → stay open, cancelled → close again.
           holding.current = false;
           holdOpen(false);
           if (!dropped && openedByDrag.current) dismiss();
@@ -373,8 +373,8 @@ function useQuickDrop(status: NotchStatus, open: () => void, dismiss: () => void
 }
 
 /**
- * Verbindung zur nativen Hülle: meldet die Trefferzone an Rust (Klick-Durchlass),
- * empfängt Hover aus dem Rust-Poll und hält das Fenster klickbar, solange getippt wird.
+ * Link to the native shell: reports the hit zone to Rust (click-through), receives
+ * hover from the Rust poll and keeps the window clickable while typing.
  */
 function useNativeBridge(
   hitRef: RefObject<HTMLDivElement | null>,
@@ -385,7 +385,7 @@ function useNativeBridge(
     const el = hitRef.current;
     if (!isNative || !el) return;
 
-    // Die Form wird per Spring in der Größe animiert → ResizeObserver feuert pro Frame mit.
+    // The shape's size is animated by a spring → ResizeObserver fires every frame.
     const report = () => {
       const r = el.getBoundingClientRect();
       setHitRect({ x: r.x, y: r.y, w: r.width, h: r.height });
@@ -395,7 +395,7 @@ function useNativeBridge(
     report();
 
     const offHover = onNativeHover((inside) => (inside ? onEnter() : onLeave()));
-    // Textfeld fokussiert → festhalten (klickbar, kein Wegklappen), bis der Fokus geht.
+    // Text field focused → hold (clickable, no collapse) until focus leaves.
     let typing = false;
     const onFocusIn = (e: FocusEvent) => {
       if (isTextField(e.target) && !typing) holdOpen((typing = true));

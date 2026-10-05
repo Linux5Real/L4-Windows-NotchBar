@@ -12,11 +12,11 @@ import { popover, springs } from "../design/motion";
 import { t } from "../i18n";
 
 /*
- * Gemeinsame Bedienelemente. Jedes Tool nutzt diese statt eigener Varianten,
- * damit Größen, Radien und Bewegung überall identisch sind (docs/DESIGN.md).
+ * Shared controls. Every tool uses these instead of its own variants, so sizes,
+ * radii and motion are identical everywhere.
  */
 
-/** Segment-Umschalter mit gleitender Pille. `id` muss pro Instanz eindeutig sein. */
+/** Segmented control with a sliding pill. `id` must be unique per instance. */
 export function Segmented<T extends string>(props: {
   id: string;
   value: T;
@@ -52,7 +52,7 @@ export function Segmented<T extends string>(props: {
   );
 }
 
-/** iOS-Schalter. Grün wie bei Apple; Knopf gleitet per Spring. */
+/** iOS switch. Green like Apple's; the knob slides with a spring. */
 export function Switch({
   checked,
   onChange,
@@ -82,7 +82,7 @@ export function Switch({
   );
 }
 
-/** Zeile in Einstellungs-Listen: Label links, Steuerelement rechts. */
+/** Row in settings lists: label on the left, control on the right. */
 export function Row({
   label,
   hint,
@@ -103,7 +103,7 @@ export function Row({
   );
 }
 
-/** Gruppierte Liste mit feinen Trennlinien (wie iOS-Einstellungen). */
+/** Grouped list with fine separators (like iOS Settings). */
 export function Group({
   title,
   children,
@@ -127,7 +127,7 @@ export function Group({
   );
 }
 
-/** Einzeiliges Feld. `secret` maskiert und bietet Anzeigen/Verbergen. */
+/** Single-line field. `secret` masks it and offers show/hide. */
 export function TextField(props: {
   value: string;
   onChange: (v: string) => void;
@@ -168,7 +168,7 @@ export function TextField(props: {
   );
 }
 
-/** Kleiner Textknopf (sekundär) oder gefüllt (primär). */
+/** Small text button (secondary) or filled (primary). */
 export function Button(props: {
   children: ReactNode;
   onClick?: () => void;
@@ -193,7 +193,7 @@ export function Button(props: {
   );
 }
 
-/** Füllstand 0–100 mit Ampelfarbe (grün → orange → rot). Nur transform wird animiert. */
+/** Fill level 0–100 with traffic-light color (green → orange → red). Only transform animates. */
 export function Meter({
   percent,
   height = 6,
@@ -227,7 +227,7 @@ export function Meter({
   );
 }
 
-/** Leerer Zustand: ruhig, mittig, ein Satz, optional eine Aktion. */
+/** Empty state: calm, centered, one sentence, optionally an action. */
 export function Empty(props: {
   icon?: Icon;
   title: string;
@@ -247,7 +247,7 @@ export function Empty(props: {
   );
 }
 
-/** Schieberegler. Zieht per Pointer-Capture; Pfeiltasten ±step. */
+/** Slider. Drags via pointer capture; arrow keys ±step. */
 export function Slider(props: {
   value: number;
   min: number;
@@ -305,12 +305,11 @@ export function Slider(props: {
   );
 }
 
-/** Kompaktes Auswahlmenü (statt nativem <select>, das unter Windows fremd aussieht). */
+/** Compact select menu (instead of a native <select>, which looks foreign on Windows). */
 /*
- * Das Menü wird per Portal in die Trefferzone der Notch gehängt (`data-notch-hit`),
- * damit es nicht von overflow-Containern abgeschnitten wird, aber weiter als
- * „innerhalb“ gilt (Außenklick-Schließen, Hit-Rect). Es klappt automatisch dorthin
- * auf, wo mehr Platz ist, und bleibt innerhalb der Notch.
+ * The menu is portaled into the notch's hit zone (`data-notch-hit`) so overflow
+ * containers don't clip it while it still counts as "inside" (outside-click close,
+ * hit rect). It opens toward the side with more room and stays inside the notch.
  */
 const MENU_ROW = 28;
 const MENU_MAX = 160;
@@ -375,7 +374,7 @@ export function Select<T extends string>(props: {
         setOpen(false);
     };
     const close = () => setOpen(false);
-    // Scrollen der Liste dahinter verschiebt den Auslöser → schließen; die eigene Liste nicht.
+    // Scrolling the list behind moves the trigger → close; our own list doesn't.
     const onScroll = (e: Event) =>
       !menu.current?.contains(e.target as Node) && setOpen(false);
     window.addEventListener("pointerdown", onDown);
@@ -455,7 +454,7 @@ export function Select<T extends string>(props: {
   );
 }
 
-/** Ruhiger Lade-Platzhalter (pulsierende Fläche statt Spinner). */
+/** Calm loading placeholder (pulsing area instead of a spinner). */
 export function Skeleton({ className = "" }: { className?: string }) {
   return (
     <div className={`animate-pulse rounded-[8px] bg-fill-1 ${className}`} />

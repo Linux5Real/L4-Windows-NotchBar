@@ -22,7 +22,7 @@ startGamingWatch();
 startDiscord();
 startUpdateWatch();
 
-// Darstellung (Monitor, Vollbild, Versatz, Gaming) an Rust geben — beim Start und bei jeder Änderung.
+// Send display settings (monitor, fullscreen, offset, gaming) to Rust on start and on every change.
 let lastDisplay = "";
 const syncDisplay = () => {
   const { display, gaming } = settings.get();
@@ -34,7 +34,7 @@ const syncDisplay = () => {
 syncDisplay();
 settings.subscribe(syncDisplay);
 
-// Sprache: Tray-Menü in Rust mitziehen und das lang-Attribut setzen.
+// Language: update the tray menu in Rust and set the lang attribute.
 let lastLang = "";
 const applyLanguage = () => {
   const { language } = settings.get();
@@ -46,8 +46,8 @@ const applyLanguage = () => {
 applyLanguage();
 settings.subscribe(applyLanguage);
 
-// Die Notch ist keine Webseite: kein Browser-Kontextmenü (außer in Textfeldern für
-// Ausschneiden/Einfügen) und in der App keine Browser-Kürzel wie Neu laden oder Drucken.
+// The notch isn't a web page: no browser context menu (except in text fields for
+// cut/paste) and in the app no browser shortcuts like reload or print.
 window.addEventListener("contextmenu", (e) => {
   if (!(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)) e.preventDefault();
 });
@@ -60,7 +60,7 @@ if (isNative) {
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    {/* reducedMotion="user": Motion respektiert die Windows-Einstellung "Animationseffekte". */}
+    {/* reducedMotion="user": Motion respects the Windows "Animation effects" setting. */}
     <MotionConfig reducedMotion="user">
       {!isNative && <DesktopMock />}
       <Notch />

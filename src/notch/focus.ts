@@ -2,14 +2,14 @@ import { createStore } from "../lib/store";
 import { onFocusExit, setPassthrough } from "../platform/native";
 
 /*
- * Fokus-Modus: Die Notch bleibt sichtbar, aber halb durchsichtig und komplett
- * klick-durchlässig — Klicks landen in der App darunter (z. B. Browser-Tabs ganz oben).
- * Rein und raus: drei schnelle Klicks auf die Notch (oder der Knopf in der Kopfzeile).
- * Nativ zählt Rust die Klicks, weil das Fenster selbst keine mehr bekommt.
+ * Focus mode: the notch stays visible but half transparent and fully click-through,
+ * so clicks reach the app below (e.g. browser tabs at the very top).
+ * In and out: three quick clicks on the notch (or the header button).
+ * Natively Rust counts the clicks, because the window no longer gets any.
  */
 export const focusMode = createStore(false, { persist: "focus-mode" });
 
-/** So viele schnelle Klicks schalten um (wie EXIT_CLICKS in hit_test.rs). */
+/** This many quick clicks toggle it (like EXIT_CLICKS in hit_test.rs). */
 export const FOCUS_CLICKS = 3;
 
 export function setFocusMode(on: boolean) {

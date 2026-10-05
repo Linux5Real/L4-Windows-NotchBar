@@ -1,6 +1,6 @@
 import { locale, t } from "../i18n";
 
-/** Formatierung an einer Stelle — Zahlen und Zeiten in der eingestellten Sprache. */
+/** Formatting in one place: numbers and times in the chosen language. */
 
 const money = new Map<string, Intl.NumberFormat>();
 

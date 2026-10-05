@@ -1,10 +1,10 @@
-//! Übersicht: Systemlautstärke und Windows-Fokus.
+//! Overview: system volume and Windows focus.
 //!
-//! - Lautstärke: Standard-Ausgabegerät über `IAudioEndpointVolume` (wie der Regler in der Taskleiste).
-//! - Fokus: Windows-11-Fokussitzung (`FocusSessionManager`, schaltet auch "Nicht stören" ein).
-//!   Fehlt die API (ältere Builds), wird "Nicht stören" direkt über den WNF-Zustand
-//!   `WNF_SHEL_QUIETHOURS_ACTIVE_PROFILE_CHANGED` gesetzt — dasselbe, was der Schalter
-//!   in der Mitteilungszentrale tut.
+//! - Volume: default output device via `IAudioEndpointVolume` (same as the taskbar slider).
+//! - Focus: Windows 11 focus session (`FocusSessionManager`, also turns on Do Not Disturb).
+//!   Without that API (older builds), Do Not Disturb is set directly through the WNF state
+//!   `WNF_SHEL_QUIETHOURS_ACTIVE_PROFILE_CHANGED`, which is what the toggle in the
+//!   notification center does.
 
 use std::ffi::c_void;
 
@@ -24,13 +24,13 @@ pub struct Volume {
 #[derive(Serialize)]
 pub struct Focus {
     active: bool,
-    /// "focus" = Fokussitzung, "dnd" = nur "Nicht stören" verfügbar
+    /// "focus" = focus session, "dnd" = only Do Not Disturb available
     kind: &'static str,
 }
 
 fn endpoint() -> windows::core::Result<IAudioEndpointVolume> {
     unsafe {
-        // Eigener Thread pro Aufruf (spawn_blocking) → MTA; "schon initialisiert" ist ok.
+        // Own thread per call (spawn_blocking) → MTA; "already initialized" is fine.
         let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
         let devices: IMMDeviceEnumerator = CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)?;
         devices.GetDefaultAudioEndpoint(eRender, eConsole)?.Activate(CLSCTX_ALL, None)
@@ -49,7 +49,7 @@ pub async fn volume_get() -> Result<Volume, String> {
         .map_err(|e| e.to_string())?
 }
 
-/// `level` 0..1 und/oder `muted` setzen; Lauter-Stellen hebt die Stummschaltung auf (wie Windows).
+/// Sets `level` 0..1 and/or `muted`. Raising the volume unmutes, like Windows does.
 #[tauri::command]
 pub async fn volume_set(level: Option<f32>, muted: Option<bool>) -> Result<Volume, String> {
     tauri::async_runtime::spawn_blocking(move || {
@@ -71,7 +71,7 @@ pub async fn volume_set(level: Option<f32>, muted: Option<bool>) -> Result<Volum
     .map_err(|e| e.to_string())?
 }
 
-// ── Fokus / Nicht stören ─────────────────────────────────────────────────────
+// ── Focus / Do Not Disturb ────────────────────────────────────────────────────
 
 const WNF_QUIET_HOURS: u64 = 0x0D83_063E_A3BF_1C75;
 
@@ -81,7 +81,7 @@ unsafe extern "system" {
     fn NtUpdateWnfStateData(state: *const u64, buffer: *const c_void, length: u32, type_id: *const c_void, scope: *const c_void, matching_stamp: u32, check_stamp: u32) -> i32;
 }
 
-/// 0 = aus, 1 = nur Priorität, 2 = nur Wecker.
+/// 0 = off, 1 = priority only, 2 = alarms only.
 fn dnd_profile() -> Option<u32> {
     let (mut stamp, mut value, mut size) = (0u32, 0u32, 4u32);
     let status = unsafe { NtQueryWnfStateData(&WNF_QUIET_HOURS, std::ptr::null(), std::ptr::null(), &mut stamp, (&mut value as *mut u32).cast(), &mut size) };
@@ -116,7 +116,7 @@ pub async fn focus_set(active: bool) -> Result<Focus, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let manager = sessions();
         if active {
-            // Fokussitzung bevorzugen; klappt sie nicht, wenigstens "Nicht stören".
+            // Prefer a focus session; if that fails, at least Do Not Disturb.
             if manager.as_ref().and_then(|m| m.TryStartFocusSession().ok()).is_none() {
                 set_dnd(true)?;
             }

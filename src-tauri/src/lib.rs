@@ -26,11 +26,11 @@ use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut,
 use windows::Win32::Foundation::HWND;
 use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, SetForegroundWindow};
 
-/// Öffnet/schließt die Notch von überall. Strg+Alt = AltGr auf deutschen
-/// Tastaturen; AltGr+Leertaste erzeugt kein Zeichen, kollidiert also nicht.
+/// Opens/closes the notch from anywhere. Ctrl+Alt = AltGr on German keyboards;
+/// AltGr+Space types nothing, so there's no conflict.
 const SHORTCUT_LABEL: &str = "Strg+Alt+Leertaste";
 
-/// Für main.rs: erhöhter Aufruf von "FPS freischalten" (siehe fps::fps_unlock).
+/// For main.rs: elevated "Unlock FPS" call (see fps::fps_unlock).
 pub fn fps_elevated_unlock(sid: &str) -> i32 {
     fps::elevated_unlock(sid)
 }
@@ -39,10 +39,10 @@ pub fn run() {
     let shortcut = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::Space);
 
     tauri::Builder::default()
-        // Zweiter Start öffnet keine zweite Notch.
+        // A second launch doesn't open a second notch.
         .plugin(tauri_plugin_single_instance::init(|_, _, _| {}))
         .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, None))
-        // Updates: signierte Installer von GitHub, nur auf Klick in den Einstellungen.
+        // Updates: signed installers from GitHub, only on click in the settings.
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(
@@ -111,10 +111,10 @@ pub fn run() {
             autostart_set,
         ])
         .setup(move |app| {
-            let window = app.get_webview_window("notch").expect("Fenster 'notch' fehlt");
+            let window = app.get_webview_window("notch").expect("window 'notch' missing");
             display::place(&window, &app.state::<display::DisplayState>())?;
             window.show()?;
-            // Erst nach show(): auf einem nie gezeigten Fenster schlägt der Aufruf fehl.
+            // Only after show(): this fails on a window that was never shown.
             window.set_ignore_cursor_events(true)?;
             drop::install(&window);
             hit_test::spawn(app.handle().clone(), window.clone());
@@ -123,22 +123,22 @@ pub fn run() {
             clipboard::spawn(app.handle().clone());
             audio::spawn(app.handle().clone(), &app.state::<audio::AudioState>());
 
-            // Belegt eine andere App das Kürzel, läuft die Notch trotzdem (nur ohne Kürzel).
+            // If another app owns the shortcut, the notch still runs, just without it.
             let _ = app.global_shortcut().register(shortcut);
             enable_autostart_once(app.handle());
             build_tray(app)?;
             Ok(())
         })
         .run(tauri::generate_context!())
-        .expect("Notch konnte nicht gestartet werden");
+        .expect("failed to start L4-Notchbar");
 }
 
-/// Fenster, das vor dem Öffnen per Tastenkürzel im Vordergrund war.
+/// Window that was in the foreground before the shortcut opened the notch.
 #[derive(Default)]
 struct FocusState(Mutex<isize>);
 
-/// Per Tastenkürzel geöffnet → Fokus holen (für Esc/Tippen).
-/// Geschlossen → Fokus an die vorherige App zurückgeben, sonst tippt man ins Leere.
+/// Opened via shortcut → take focus (for Esc/typing).
+/// Closed → give focus back to the previous app, otherwise typing goes nowhere.
 #[tauri::command]
 fn keyboard_focus(focus: bool, window: WebviewWindow, state: State<'_, FocusState>) {
     let Ok(own) = window.hwnd() else { return };
@@ -168,7 +168,7 @@ fn autostart_set(enabled: bool, app: AppHandle) -> Result<(), String> {
     if enabled { manager.enable() } else { manager.disable() }.map_err(|e| e.to_string())
 }
 
-/// Beim allerersten Start Autostart einschalten; danach entscheidet der Tray-Haken bzw. die Einstellungen.
+/// Enables autostart on the very first launch; after that the tray check and settings decide.
 fn enable_autostart_once(app: &AppHandle) {
     let Ok(dir) = app.path().app_data_dir() else { return };
     let marker = dir.join("autostart-initialized");
@@ -181,11 +181,11 @@ fn enable_autostart_once(app: &AppHandle) {
     }
 }
 
-/// Tray-Einträge, deren Text beim Sprachwechsel getauscht wird.
+/// Tray items whose text changes with the language.
 #[derive(Default)]
 struct TrayItems(Mutex<Option<(MenuItem<tauri::Wry>, MenuItem<tauri::Wry>, CheckMenuItem<tauri::Wry>, MenuItem<tauri::Wry>)>>);
 
-/// Texte: Öffnen (Kürzel rechtsbündig per Tab, wie in Windows-Menüs üblich), Einstellungen, Autostart, Beenden.
+/// Open (shortcut right-aligned via tab, like Windows menus), settings, autostart, quit.
 fn tray_texts(lang: &str) -> [String; 4] {
     if lang == "en" {
         let keys = SHORTCUT_LABEL.replace("Strg", "Ctrl").replace("Leertaste", "Space");
@@ -206,9 +206,9 @@ fn set_language(lang: String, state: State<'_, TrayItems>) {
     }
 }
 
-/// Kontextmenüs (Tray) dunkel wie die Notch statt im hellen Standard-Look.
-/// uxtheme exportiert das nur per Ordinal: SetPreferredAppMode = 135, FlushMenuThemes = 136
-/// (seit Windows 10 1903). Fehlt es, bleibt das Menü einfach hell.
+/// Dark tray menu to match the notch instead of the light default.
+/// uxtheme only exports this by ordinal: SetPreferredAppMode = 135, FlushMenuThemes = 136
+/// (Windows 10 1903+). If missing, the menu just stays light.
 fn dark_menus() {
     use windows::core::{w, PCSTR};
     use windows::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
@@ -226,8 +226,8 @@ fn dark_menus() {
     }
 }
 
-/// Ohne Taskleisten-Eintrag ist das Tray der Ort für Öffnen, Einstellungen und Beenden.
-/// Linksklick öffnet die Notch, Rechtsklick zeigt das Menü.
+/// Without a taskbar entry, the tray is where you open, configure and quit.
+/// Left click opens the notch, right click shows the menu.
 fn build_tray(app: &App) -> tauri::Result<()> {
     dark_menus();
     let enabled = app.autolaunch().is_enabled().unwrap_or(false);
@@ -262,7 +262,7 @@ fn build_tray(app: &App) -> tauri::Result<()> {
             }
             "quit" => app.exit(0),
             "autostart" => {
-                // Der Haken schaltet beim Klick selbst um; Zustand danach übernehmen.
+                // The check item toggles itself on click; read the new state.
                 let on = autostart_item.is_checked().unwrap_or(false);
                 let manager = app.autolaunch();
                 let _ = if on { manager.enable() } else { manager.disable() };

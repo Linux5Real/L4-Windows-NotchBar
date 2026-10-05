@@ -1,14 +1,14 @@
 import type { Transition } from "motion/react";
 
 /*
- * Bewegungs-Presets. Jede Animation in der App nutzt eines davon —
- * keine Inline-Werte in Komponenten. Begründungen: docs/DESIGN.md → Bewegung.
+ * Motion presets. Every animation in the app uses one of these,
+ * no inline values in components.
  *
- * Springs im Apple-Stil (visualDuration + bounce) statt stiffness/damping:
- * leichter zu lesen und entspricht SwiftUIs .spring(duration:bounce:).
+ * Apple-style springs (visualDuration + bounce) instead of stiffness/damping:
+ * easier to read and matches SwiftUI's .spring(duration:bounce:).
  */
 
-// ?slow=4 in der URL verlangsamt alle Springs zum Feintuning.
+// ?slow=4 in the URL slows all springs down for tuning.
 const slow = Number(new URLSearchParams(location.search).get("slow")) || 1;
 
 const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -19,39 +19,39 @@ function spring(visualDuration: number, bounce: number): Transition {
 }
 
 export const springs = {
-  /** Notch öffnet sich: lebendig, merklicher aber kurzer Überschwinger. */
+  /** Notch opens: lively, a noticeable but short overshoot. */
   open: spring(0.42, 0.24),
-  /** Notch schließt sich: schneller als Öffnen, kein Bounce (asymmetrisch). */
+  /** Notch closes: faster than opening, no bounce. */
   close: spring(0.32, 0.04),
-  /** Hover-Anstupsen: klein und verspielt, bestätigt "ich hab dich gesehen". */
+  /** Hover nudge: small and playful, says "I see you". */
   peek: spring(0.26, 0.32),
-  /** Formwechsel bei offener Notch (Tab-Wechsel, Live-Aktivität). */
+  /** Shape change while open (tab switch, live activity). */
   morph: spring(0.36, 0.14),
-  /** Kleine Elemente innerhalb (Tab-Pille, Toggles). */
+  /** Small elements inside (tab pill, toggles). */
   snappy: spring(0.24, 0.12),
 } as const;
 
 const easeOut = [0.23, 1, 0.32, 1] as const;
 
-/** Kurzes Ein-/Ausblenden für Overlays ("Kopiert", Status-Wechsel). */
+/** Quick fade for overlays ("Copied", status changes). */
 export const fade = { duration: 0.16 * slow, ease: easeOut } satisfies Transition;
 
-/** Überblenden großer Flächen (Cover, Diagramme) — etwas ruhiger. */
+/** Crossfade for large areas (covers, charts), a bit calmer. */
 export const crossfade = { duration: 0.4 * slow, ease: "easeInOut" } satisfies Transition;
 
-/** Menüs/Popover: schnell rein, noch schneller raus. */
+/** Menus/popovers: fast in, even faster out. */
 export const popover = {
   enter: { duration: 0.16 * slow, ease: easeOut },
   exit: { duration: 0.1 * slow, ease: easeOut },
 } satisfies Record<string, Transition>;
 
-/** Dauerdrehung für "lädt" (Aktualisieren-Symbol). */
+/** Continuous spin for "loading" (refresh icon). */
 export const spin = { repeat: Infinity, duration: 0.9, ease: "linear" } satisfies Transition;
 
-/** Ruhiges Pulsieren für "klingelt gerade" (Opacity hin und her). */
+/** Calm pulse for "ringing" (opacity back and forth). */
 export const pulse = { repeat: Infinity, repeatType: "reverse", duration: 0.7, ease: "easeInOut" } satisfies Transition;
 
-/** Inhalt erscheint, nachdem die Form losgelaufen ist; verschwindet sofort. */
+/** Content appears after the shape starts moving; disappears immediately. */
 export const content = {
   enter: {
     duration: 0.24 * slow,

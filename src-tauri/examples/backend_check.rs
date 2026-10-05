@@ -1,8 +1,8 @@
-//! Backend-Prüfung ohne UI: cargo run --example backend_check -- <scratch-dir>
+//! Backend check without UI: cargo run --example backend_check -- <scratch-dir>
 fn main() {
-    let dir = std::env::args().nth(1).expect("Scratch-Verzeichnis angeben");
+    let dir = std::env::args().nth(1).expect("pass a scratch directory");
     let rt = tauri::async_runtime::block_on(notch_lib::usage::probe_for_test());
-    // Nur Anzahl der Fenster bzw. Fehlercode — keine Kontodaten ausgeben.
+    // Only print window counts or error codes, never account data.
     for (id, result) in rt {
         println!("usage {id}: {result:?}");
     }

@@ -12,7 +12,7 @@ import { settings } from "../../settings/store";
 import { Button, Empty, Segmented, Skeleton } from "../../ui/controls";
 import { locale, t } from "../../i18n";
 
-/** Polling, solange das Tool offen ist. Die API erlaubt 1 Abfrage / 5 s. */
+/** Polls while the tool is open. The API allows one request per 5 s. */
 const POLL_MS = 30_000;
 
 type Range = "1d" | "7d" | "30d" | "all";
@@ -25,15 +25,15 @@ const ranges: { value: Range; label: string }[] = [
 const range = createStore<Range>("1d", { persist: "trading-range" });
 
 /*
- *   Depot                                  [1T 7T 30T Alles] [⟳] [📌]
+ *   Portfolio                                [1D 7D 30D All] [⟳] [📌]
  *   12.345,67 €                         ╱╲    ╱‾‾
- *   +4,20 € (+0,17 %) heute        ___╱  ╲__╱      G/V +12,30 € · 7T
- *   [Cash] [Investiert] [Offen +0,07 € +1,9 %] [Realisiert +85 €]
+ *   +4,20 € (+0,17 %) today        ___╱  ╲__╱      P&L +12,30 € · 7D
+ *   [Cash] [Invested] [Open +0,07 € +1,9 %] [Realized +85 €]
  *   AAPL  Apple                                  845,20 €  [+2,10 %]
  *
- * Alle Veränderungen rechnen mit dem Gewinn (realisiert + unrealisiert) statt dem
- * Kontowert — Ein- und Auszahlungen verfälschen so weder "heute" noch den Verlauf.
- * Prozent heute = Änderung / Kontowert am Vortag; Prozent offen = offener G/V / Einstand.
+ * All changes are based on profit (realized + unrealized) instead of account value,
+ * so deposits and withdrawals distort neither "today" nor the history.
+ * Percent today = change / yesterday's account value; percent open = open P&L / cost basis.
  */
 export function TradingView() {
   const env = settings.use().trading.env;
@@ -144,7 +144,7 @@ function useTrading(env: "live" | "demo") {
     } catch (e) {
       if (!alive.current) return;
       const code = String(e);
-      // Rate-Limit still schlucken, solange Daten da sind.
+      // Silently swallow rate limits while we have data.
       if (code !== "rate") setError(code);
     } finally {
       if (alive.current) setLoading(false);
@@ -165,8 +165,8 @@ function useTrading(env: "live" | "demo") {
 }
 
 /**
- * Heute = G/V jetzt − G/V am Ende des Vortags (Prozent auf den Kontowert vom Vortag).
- * Ohne Vortag: seit dem ersten Abruf heute. Ohne beides: nichts (statt Unsinn).
+ * Today = P&L now − P&L at the end of yesterday (percent of yesterday's account value).
+ * Without yesterday: since the first fetch today. Without either: nothing (instead of nonsense).
  */
 function todayChange(d: TradingData): { change: number; pct: number | null; label: string } | null {
   const pnlNow = d.unrealized + d.realized;
@@ -180,7 +180,7 @@ function todayChange(d: TradingData): { change: number; pct: number | null; labe
   return null;
 }
 
-/** G/V-Verlauf für den Zeitraum: 1T aus den Tagespunkten, sonst ein Punkt pro Tag. */
+/** P&L history for the range: 1D from intraday points, otherwise one point per day. */
 function seriesFor(d: TradingData, r: Range): number[] {
   if (r === "1d") {
     const prev = d.history.length >= 2 ? d.history.at(-2)!.pnl : null;
@@ -220,7 +220,7 @@ function Stat({ label, value, sub, tone: t }: { label: string; value: string; su
   );
 }
 
-/** Linie + weiche Fläche, grün oder rot je nach Verlauf im Zeitraum. Zeichnet sich beim Wechsel neu. */
+/** Line + soft area, green or red depending on the range. Redraws on change. */
 function Chart({ series, currency, rangeLabel }: { series: number[]; currency: string; rangeLabel: string }) {
   const w = 210;
   const h = 56;
@@ -276,7 +276,7 @@ function Chart({ series, currency, rangeLabel }: { series: number[]; currency: s
   );
 }
 
-/** Wert blendet beim Ändern weich über (Blur-Brücke) statt hart zu springen. */
+/** Value crossfades on change (blur bridge) instead of jumping. */
 function AnimatedValue({ text, className }: { text: string; className: string }) {
   return (
     <div className="relative">

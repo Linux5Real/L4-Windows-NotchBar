@@ -45,18 +45,18 @@ const filters: { value: Filter; label: string }[] = [
   { value: "files", label: "Dateien" },
 ];
 
-/** Höhe der Kartenreihe; die Bildvorschau hängt sich darunter an. */
+/** Height of the card row; the image preview attaches below it. */
 const ROW_H = 146;
 const PREVIEW_MAX_H = 290;
-/** Abstand + Zeile unter dem Bild (Maße, Knöpfe). */
+/** Gap + row below the image (size, buttons). */
 const PREVIEW_CHROME = 46;
 
 type LoadedPreview = ClipPreview & { w: number; h: number };
 
 /**
- * Verlauf als horizontale Kartenreihe, neueste links. Mausrad scrollt seitwärts,
- * Ränder blenden weich aus. Klick kopiert zurück, × entfernt.
- * Bilder: Klick öffnet eine große Vorschau — die Notch wächst dafür weich nach unten.
+ * History as a horizontal card row, newest on the left. The wheel scrolls sideways,
+ * edges fade out. Click copies back, × removes.
+ * Images: click opens a large preview; the notch grows down smoothly for it.
  */
 export function ClipboardView() {
   const all = useClipboard();
@@ -68,12 +68,12 @@ export function ClipboardView() {
   const items = filter === "all" ? all : all.filter((i) => i.kind === filter || (filter === "image" && !!i.thumbnail));
   const preview = usePreview(previewId);
 
-  // Vorschau weg, wenn der Eintrag verschwindet.
+  // Drop the preview when its entry disappears.
   useEffect(() => {
     if (previewId !== null && !all.some((i) => i.id === previewId)) setPreviewId(null);
   }, [all, previewId]);
 
-  // Mausrad (vertikal) → horizontal scrollen.
+  // Vertical wheel → horizontal scroll.
   useEffect(() => {
     const el = scroller.current;
     if (!el) return;
@@ -173,8 +173,8 @@ function CardButton({ label, icon: I, onClick }: { label: string; icon: Icon; on
 }
 
 /**
- * Lädt die große Vorschau und meldet der Notch die passende Höhe:
- * Bild so groß wie möglich im Seitenverhältnis, höchstens PREVIEW_MAX_H hoch.
+ * Loads the large preview and tells the notch the right height:
+ * the image as large as its aspect ratio allows, at most PREVIEW_MAX_H tall.
  */
 function usePreview(id: number | null): LoadedPreview | null {
   const [data, setData] = useState<LoadedPreview | null>(null);
@@ -188,7 +188,7 @@ function usePreview(id: number | null): LoadedPreview | null {
     void clipboard.preview(id).then((p) => {
       if (!alive || !p) return;
       const base = findTab("clipboard")!.size;
-      // So hoch wie möglich, ohne über das Fenster hinauszuwachsen.
+      // As tall as possible without growing past the window.
       const h = Math.min(PREVIEW_MAX_H, MAX_SIZE.h - base.h - PREVIEW_CHROME, ((base.w - 32) * p.height) / p.width);
       setData({ ...p, w: (h * p.width) / p.height, h });
       requestSize("clipboard", { w: base.w, h: base.h + h + PREVIEW_CHROME });
@@ -209,7 +209,7 @@ function PreviewPane({ preview, onCopy, onClose }: { preview: LoadedPreview; onC
       animate={{ opacity: 1, filter: "blur(0px)", transform: "translateY(0px)", transition: { ...content.enter, delay: 0.08 } }}
       exit={{ opacity: 0, filter: "blur(4px)", transition: content.exit }}
     >
-      {/* Bildwechsel: übereinander überblenden, die Fläche selbst bleibt stehen. */}
+      {/* Image change: crossfade on top of each other, the area itself stays put. */}
       <div className="relative" style={{ width: preview.w, height: preview.h }}>
         <AnimatePresence initial={false}>
           <motion.img
@@ -244,7 +244,7 @@ function PreviewPane({ preview, onCopy, onClose }: { preview: LoadedPreview; onC
 function Card(props: { item: ClipItem; now: number; copied: boolean; selected: boolean; onClick: () => void }) {
   const { item, now, copied } = props;
   const KindIcon = kindIcon[item.kind];
-  // Bilder und kopierte Bilddateien füllen die Karte.
+  // Images and copied image files fill the card.
   const isImage = !!item.thumbnail;
 
   return (
@@ -258,7 +258,7 @@ function Card(props: { item: ClipItem; now: number; copied: boolean; selected: b
       {isImage && (
         <>
           <img src={item.thumbnail!} alt="" draggable={false} className="absolute inset-0 size-full object-cover" />
-          {/* Verlauf, damit Symbol und Zeit auf jedem Bild lesbar bleiben. */}
+          {/* Gradient so icon and time stay readable on any image. */}
           <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-transparent to-black/50" />
         </>
       )}
@@ -342,7 +342,7 @@ function splitUrl(url: string): { host: string; rest: string } {
     try {
       decoded = decodeURI(rest);
     } catch {
-      // Ungültige %-Sequenz → roh anzeigen.
+      // Invalid %-sequence → show it raw.
     }
     return { host: u.hostname.replace(/^www\./, ""), rest: decoded };
   } catch {

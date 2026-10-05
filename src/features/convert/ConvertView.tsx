@@ -29,8 +29,8 @@ import { t, tBackend } from "../../i18n";
 const kindIcon: Record<FileKind, Icon> = { image: ImageSquare, audio: FileAudio, video: FileVideo, document: FileText, table: Table, other: File };
 
 /**
- * Zielformate je Dateiart. Video → MP3 zieht die Tonspur heraus. DDS = Spiele-Textur
- * (BC3 mit Mipmaps). Dokumente: PDF-Eingabe liefert nur den Text; PDF-Ausgabe druckt Edge.
+ * Target formats per file type. Video → MP3 extracts the audio. DDS = game texture
+ * (BC3 with mipmaps). Documents: PDF input only gives the text; PDF output prints via Edge.
  */
 const targets: Record<Exclude<FileKind, "other">, string[]> = {
   image: ["png", "jpg", "webp", "ico", "bmp", "dds"],
@@ -97,7 +97,7 @@ function FilesPanel() {
     setTimeout(() => setNothing(false), 1600);
   });
 
-  // Dateien übernehmen, sobald welche auf die Notch fallen (auch wenn sie vorher zu war).
+  // Take files as soon as they land on the notch (even if it was closed).
   const dropped = drop.use().dropped;
   useEffect(() => {
     const paths = takeDropped();
@@ -107,7 +107,7 @@ function FilesPanel() {
       setFfmpeg(p.ffmpeg);
       setResults(null);
       const kind = commonKind(p.files);
-      // Vorauswahl: ein Format, das noch keine der Dateien hat.
+      // Preselect a format none of the files has yet.
       setTarget(kind ? (targets[kind].find((t) => !p.files.some((f) => sameFormat(f.ext, t))) ?? targets[kind][0]) : null);
     });
   }, [dropped]);
@@ -117,7 +117,7 @@ function FilesPanel() {
   const needsFfmpeg = kind === "audio" || kind === "video";
   const showQuality = target === "jpg" || (needsFfmpeg && target !== "wav" && target !== "flac");
 
-  // Dateien, die schon im Zielformat sind, werden übersprungen statt als Fehler gezählt.
+  // Files already in the target format are skipped instead of counted as errors.
   const pending = target ? files.filter((f) => !sameFormat(f.ext, target)) : [];
 
   const run = async () => {

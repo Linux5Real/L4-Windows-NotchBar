@@ -2,42 +2,42 @@ import { useEffect, useRef } from "react";
 import { audioLevelsAvailable, subscribeLevels, type Levels } from "../../platform/audio";
 
 /*
- * Vier Balken in der Akzentfarbe, Bässe links → Höhen rechts.
+ * Four bars in the accent color, bass on the left, treble on the right.
  *
- * Eine einzige Animationsschleife für alle Zustände, damit nie hart umgeschaltet wird:
- * - Spielt + echte Pegel (WASAPI-Loopback, ~40 Werte/s): Balken folgen dem Sound.
- * - Stille beim Song-Wechsel oder Spulen: sanftes "Atmen" statt auf null zu fallen.
- * - Im Browser oder ohne Pegel: dieselbe weiche Bewegung, synthetisch.
- * - Pausiert: Balken gleiten auf eine ruhige, gleiche Höhe.
- * Werte gehen direkt auf `transform` (kein React-Render pro Frame) und werden pro Frame
- * zeitbasiert geglättet: schnell hoch, langsamer runter — wie ein analoger Pegel.
+ * One animation loop for every state, so nothing ever switches hard:
+ * - Playing + real levels (WASAPI loopback, ~40 values/s): bars follow the sound.
+ * - Silence on track change or seek: gentle "breathing" instead of dropping to zero.
+ * - In the browser or without levels: the same soft motion, synthetic.
+ * - Paused: bars glide to a calm, even height.
+ * Values go straight to `transform` (no React render per frame) and are smoothed per
+ * frame over time: fast attack, slower release, like an analog meter.
  */
 const MIN = 0.2;
 const IDLE = 0.24;
-/** Zeitkonstanten (s) der Glättung. */
+/** Smoothing time constants (s). */
 const ATTACK = 0.045;
 const RELEASE = 0.14;
 const SETTLE = 0.18;
-/** GSMTC meldet beim Spulen/Wechseln kurz "pausiert" → so lange ignorieren. */
+/** GSMTC briefly reports "paused" on seek/track change; ignore it for this long. */
 const PAUSE_DEBOUNCE_MS = 320;
-/** Aufnahme nach Pause noch kurz offen lassen: Weiterspielen reagiert sofort. */
+/** Keep the capture open briefly after pausing so resuming reacts instantly. */
 const RELEASE_CAPTURE_MS = 2000;
 
-/** Weiche Pseudo-Bewegung pro Balken (überlagerte Sinus-Wellen, unterschiedliche Tempi). */
+/** Soft fake motion per bar (layered sine waves at different speeds). */
 function synthetic(i: number, t: number): number {
   const a = Math.sin(t * (5.1 + i * 1.3) + i * 1.7);
   const b = Math.sin(t * (2.3 + i * 0.7) + i * 0.9);
   return 0.5 + 0.32 * a + 0.18 * b;
 }
 
-/** `tint` = Tailwind-Hintergrundklasse der Balken (Discord: grün statt Akzent). */
+/** `tint` = Tailwind background class for the bars (Discord: green instead of accent). */
 export function Equalizer({ playing, height = 12, tint = "bg-accent" }: { playing: boolean; height?: number; tint?: string }) {
   const bars = useRef<(HTMLSpanElement | null)[]>([]);
   const playingRef = useRef(playing);
   const levels = useRef<{ values: Levels; at: number } | null>(null);
   const wake = useRef<() => void>(() => {});
 
-  // Pause leicht verzögert übernehmen (Flackern beim Spulen), Start sofort.
+  // Apply pause with a slight delay (flicker on seek), start immediately.
   useEffect(() => {
     if (playing) {
       playingRef.current = true;
@@ -51,7 +51,7 @@ export function Equalizer({ playing, height = 12, tint = "bg-accent" }: { playin
     return () => window.clearTimeout(id);
   }, [playing]);
 
-  // Echte Pegel abonnieren; nach einer Pause erst verzögert abmelden.
+  // Subscribe to real levels; unsubscribe with a delay after pausing.
   const off = useRef<(() => void) | null>(null);
   useEffect(() => {
     if (!audioLevelsAvailable) return;
@@ -75,7 +75,7 @@ export function Equalizer({ playing, height = 12, tint = "bg-accent" }: { playin
     [],
   );
 
-  // Animationsschleife: läuft, solange sich etwas bewegt; schläft, wenn pausiert und eingeschwungen.
+  // Animation loop: runs while something moves, sleeps when paused and settled.
   useEffect(() => {
     const value = [IDLE, IDLE, IDLE, IDLE];
     let frame = 0;
@@ -88,7 +88,7 @@ export function Equalizer({ playing, height = 12, tint = "bg-accent" }: { playin
       const t = now / 1000;
       const live = levels.current && now - levels.current.at < 400 ? levels.current.values : null;
       const loud = live ? Math.max(...live) : 0;
-      // Stille trotz Wiedergabe (Song-Wechsel, Spulen) → nach 150 ms sanft atmen lassen.
+      // Silence while playing (track change, seek) → breathe gently after 150 ms.
       quiet = live && loud > 0.06 ? 0 : quiet + dt;
       const breathe = Math.min(1, Math.max(0, (quiet - 0.15) / 0.35));
 

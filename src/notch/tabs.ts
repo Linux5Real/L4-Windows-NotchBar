@@ -34,13 +34,13 @@ import { DiscordView } from "../features/discord/DiscordView";
 import { SettingsView } from "../features/settings/SettingsView";
 
 /**
- * Registrierung aller Tools der offenen Notch. Neues Tool = neuer Eintrag hier
- * + ID in `TOOL_IDS` (src/settings/store.ts). Sichtbarkeit und Reihenfolge
- * bestimmt der Nutzer in den Einstellungen.
+ * Registry of all tools in the open notch. New tool = new entry here
+ * + ID in `TOOL_IDS` (src/settings/store.ts). Visibility and order
+ * are up to the user in the settings.
  *
- * `size` ist die Größe der offenen Notch für dieses Tool (inkl. Kopfzeile und Dock);
- * beim Tab-Wechsel morpht die Form dorthin. Max. 740 × 540 (Fenstergröße).
- * Tools können sie zur Laufzeit vergrößern: `requestSize` (src/notch/size.ts).
+ * `size` is the open notch size for this tool (incl. header and dock);
+ * the shape morphs there on tab switch. Max. 740 × 540 (window size).
+ * Tools can grow it at runtime: `requestSize` (src/notch/size.ts).
  */
 export interface NotchTab {
   id: string;
@@ -67,7 +67,7 @@ export const tabs: NotchTab[] = [
   { id: "discord", label: "Discord", icon: DiscordLogo, size: { w: 520, h: 210 }, View: DiscordView },
 ];
 
-/** Einstellungen: über das Zahnrad, nicht in der Tool-Leiste. */
+/** Settings: reached via the gear, not in the tool bar. */
 export const settingsTab: NotchTab = { id: "settings", label: "Einstellungen", icon: GearSix, size: { w: 660, h: 460 }, View: SettingsView };
 
 export function findTab(id: string): NotchTab | undefined {

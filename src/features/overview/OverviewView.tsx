@@ -16,13 +16,13 @@ import { locale, t } from "../../i18n";
 
 /*
  *   14:32                                    ☀ 18°
- *   Sonntag, 5. Oktober                 Wien · Klar
+ *   Sunday, 5 October                Vienna · Clear
  *   ┌──────────────────────────────────────────────┐
- *   │ ▣ Song – Künstler                      ▮▮▮▮  │   ← was gerade läuft (Klick öffnet das Tool)
+ *   │ ▣ Song – Artist                        ▮▮▮▮  │   ← what's playing (click opens the tool)
  *   └──────────────────────────────────────────────┘
- *   [☾ Fokus  ]  [🔊 ━━━━━━━━━━━━━━━━━━━━━━━  42 %]
+ *   [☾ Focus  ]  [🔊 ━━━━━━━━━━━━━━━━━━━━━━━  42 %]
  *
- * Wie das Kontrollzentrum: Überblick + die zwei Schalter, die man ständig braucht.
+ * Like Control Center: an overview plus the two toggles you need all the time.
  */
 export function OverviewView() {
   return (
@@ -84,7 +84,7 @@ function Header() {
   );
 }
 
-/** Was gerade läuft, nach derselben Wichtigkeit wie die geschlossene Notch: Timer, Anruf, Musik. */
+/** What's running, in the same priority as the closed notch: timer, call, music. */
 function Activity() {
   const np = useNowPlaying();
   const call = useDiscordCall();
@@ -115,7 +115,7 @@ function Activity() {
       key: "media",
       tab: "media",
       icon: np.artwork ? (
-        // Gleiche layoutId wie das Cover in "Wiedergabe" → Klick lässt es dorthin fliegen.
+        // Same layoutId as the cover in Now Playing, so a click flies it there.
         <motion.img layoutId={ARTWORK_LAYOUT_ID} transition={springs.morph} src={np.artwork} alt="" draggable={false} className="size-7 rounded-[6px] object-cover" />
       ) : (
         <MusicNoteSimple size={18} weight="fill" className="text-label-2" />
@@ -161,13 +161,13 @@ function Activity() {
   );
 }
 
-/** Windows-Fokus an/aus. Hell = an (wie im Kontrollzentrum). */
+/** Windows focus on/off. Light = on (like Control Center). */
 function FocusTile() {
   const [focus, setFocus] = useState<FocusState | null>(null);
   useEffect(() => {
     const load = () => void systemControls.focus().then(setFocus).catch(() => setFocus(null));
     load();
-    // Auch außerhalb umgeschaltet (Taskleiste, Uhr-App) → nachziehen.
+    // Also toggled elsewhere (taskbar, Clock app) → follow it.
     const id = setInterval(load, 2000);
     return () => clearInterval(id);
   }, []);
@@ -201,7 +201,7 @@ function FocusTile() {
   );
 }
 
-/** Dicker Lautstärkeregler wie im Kontrollzentrum: ganze Fläche ziehen, Symbol = stumm. */
+/** Thick volume slider like Control Center: drag anywhere, icon = mute. */
 function VolumeTile() {
   const [vol, setVol] = useState<VolumeState | null>(null);
   const dragging = useRef(false);
@@ -210,7 +210,7 @@ function VolumeTile() {
   useEffect(() => {
     const load = () => !dragging.current && void systemControls.volume().then(setVol).catch(() => {});
     load();
-    // Tastatur-Lautstärketasten oder Taskleiste → nachziehen.
+    // Keyboard volume keys or taskbar → follow them.
     const id = setInterval(load, 1000);
     return () => clearInterval(id);
   }, []);

@@ -1,15 +1,15 @@
-//! API-Schlüssel in der Windows-Anmeldeinformationsverwaltung.
+//! API keys in Windows Credential Manager.
 //!
-//! Das Frontend kann Schlüssel nur setzen, löschen und abfragen, ob einer existiert —
-//! lesen kann sie nur Rust (für die HTTP-Aufrufe). So landet kein Geheimnis im WebView.
-//! Sichtbar unter Systemsteuerung → Anmeldeinformationsverwaltung → "Notch/…".
+//! The frontend can only set, delete and check whether a key exists. Only Rust can
+//! read them (for HTTP calls), so no secret ever reaches the WebView.
+//! Visible under Control Panel → Credential Manager → "Notch/…".
 
 use windows::core::{HSTRING, PWSTR};
 use windows::Win32::Security::Credentials::{
     CredDeleteW, CredFree, CredReadW, CredWriteW, CREDENTIALW, CRED_PERSIST_LOCAL_MACHINE, CRED_TYPE_GENERIC,
 };
 
-/// Erlaubte Namen — schützt davor, dass das Frontend beliebige Einträge anlegt.
+/// Allowed names, so the frontend can't create arbitrary entries.
 const ALLOWED: &[&str] = &["t212.key", "t212.secret", "ai.anthropic", "ai.openai", "ai.openrouter", "ai.custom", "discord.secret", "discord.token"];
 
 fn target(name: &str) -> Result<HSTRING, String> {
@@ -33,7 +33,7 @@ pub fn read(name: &str) -> Option<String> {
 
 #[tauri::command]
 pub fn secret_set(name: String, value: String) -> Result<(), String> {
-    // Prüft den Namen gegen die Erlaubtliste.
+    // Check the name against the allowlist.
     target(&name)?;
     let value = value.trim();
     if value.is_empty() {
@@ -55,7 +55,7 @@ pub fn secret_set(name: String, value: String) -> Result<(), String> {
 #[tauri::command]
 pub fn secret_delete(name: String) -> Result<(), String> {
     let target = target(&name)?;
-    // Nicht vorhanden ist kein Fehler.
+    // Not existing isn't an error.
     let _ = unsafe { CredDeleteW(&target, CRED_TYPE_GENERIC, None) };
     Ok(())
 }

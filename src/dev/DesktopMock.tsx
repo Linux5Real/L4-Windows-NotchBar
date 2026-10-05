@@ -3,8 +3,8 @@ import { media, useNowPlaying } from "../platform/media";
 import { mockDiscord, mockPrivacy } from "../platform/services";
 
 /**
- * Nur im Browser: simuliert einen Windows-11-Desktop, damit Design und
- * Bewegung ohne Tauri beurteilt werden können. In der App unsichtbar.
+ * Browser only: fakes a Windows 11 desktop so design and motion can be judged
+ * without Tauri. Not rendered in the app.
  */
 export function DesktopMock() {
   const [light, setLight] = useState(false);
@@ -20,7 +20,7 @@ export function DesktopMock() {
         transition: "background 400ms ease",
       }}
     >
-      {/* Ein maximiertes Fenster, damit man die Notch über echtem Inhalt sieht. */}
+      {/* A maximized window so the notch sits over real content. */}
       <div
         className="absolute inset-x-[12%] top-[14%] bottom-[18%] overflow-hidden rounded-lg shadow-2xl"
         style={{ background: light ? "#ffffff" : "#202020", color: light ? "#111" : "#eee" }}
@@ -38,7 +38,7 @@ export function DesktopMock() {
         </div>
       </div>
 
-      {/* Dev-Panel */}
+      {/* Dev panel */}
       <div className="fixed right-4 bottom-16 z-10 flex gap-2 rounded-xl bg-black/60 p-2 text-xs text-white backdrop-blur">
         <DevButton onClick={media.toggle}>{np?.isPlaying ? "Pause" : "Play"}</DevButton>
         <DevButton onClick={media.next}>Nächster Song</DevButton>
@@ -48,7 +48,7 @@ export function DesktopMock() {
         <DevButton onClick={() => setLight((l) => !l)}>{light ? "Dunkel" : "Hell"}</DevButton>
       </div>
 
-      {/* Fake-Taskleiste */}
+      {/* Fake taskbar */}
       <div
         className="fixed inset-x-0 bottom-0 h-12 backdrop-blur-xl"
         style={{ background: light ? "rgb(243 243 243 / 0.8)" : "rgb(28 28 28 / 0.8)" }}

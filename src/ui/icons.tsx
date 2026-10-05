@@ -2,8 +2,8 @@ import { forwardRef, type ReactElement } from "react";
 import { IconBase, type Icon, type IconWeight } from "@phosphor-icons/react";
 
 /**
- * Eigene Symbole im Phosphor-Raster (256er viewBox, runde Enden), wo Phosphor
- * zu verspielt ist. Gleiche API wie Phosphor (`size`, `weight`, `className`).
+ * Custom icons on the Phosphor grid (256 viewBox, round caps) where Phosphor
+ * is too playful. Same API as Phosphor (`size`, `weight`, `className`).
  */
 const stroke: Record<IconWeight, number> = { thin: 8, light: 12, regular: 16, bold: 24, fill: 24, duotone: 16 };
 
@@ -21,7 +21,7 @@ function make(name: string, draw: (w: number) => ReactElement): Icon {
   return C as Icon;
 }
 
-/** RAM: schlanker Riegel mit vier Kontakten, Kerbe in der Mitte. */
+/** RAM: slim stick with four contacts and a notch in the middle. */
 export const RamIcon = make("RamIcon", () => (
   <>
     <rect x="28" y="72" width="200" height="84" rx="18" />
@@ -29,7 +29,7 @@ export const RamIcon = make("RamIcon", () => (
   </>
 ));
 
-/** GPU: Karte mit einem Lüfter, Slotblech links. */
+/** GPU: card with one fan, bracket on the left. */
 export const GpuIcon = make("GpuIcon", () => (
   <>
     <rect x="44" y="64" width="184" height="112" rx="20" />
@@ -38,7 +38,7 @@ export const GpuIcon = make("GpuIcon", () => (
   </>
 ));
 
-/** Depot: eine ruhige Kurslinie nach oben. */
+/** Portfolio: a calm price line going up. */
 export const DepotIcon = make("DepotIcon", () => (
   <>
     <path d="M32 184l56-56 40 32 96-88" />

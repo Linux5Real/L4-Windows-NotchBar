@@ -1,10 +1,10 @@
-//! Systemwerte für das Hardware-Tool: CPU, RAM, GPU (Auslastung + Grafikspeicher), Ping.
-//! Wird nur abgefragt, solange das Tool offen ist (Frontend pollt ~1×/s).
+//! System stats for the Hardware tool: CPU, RAM, GPU (load + VRAM), ping.
+//! Only queried while the tool is open (the frontend polls ~1×/s).
 //!
-//! - GPU-Auslastung: Leistungsindikator "GPU Engine(*engtype_3D)" — derselbe Wert wie im
-//!   Task-Manager, herstellerunabhängig (NVIDIA, AMD, Intel).
-//! - Grafikspeicher: "GPU Adapter Memory(*)\Dedicated Usage" + Gesamtgröße aus DXGI.
-//! - Ping: ICMP-Echo an 1.1.1.1 in einem eigenen Thread (alle 2 s, nur während abgefragt wird).
+//! - GPU load: performance counter "GPU Engine(*engtype_3D)", the same value as
+//!   Task Manager, vendor-independent (NVIDIA, AMD, Intel).
+//! - VRAM: "GPU Adapter Memory(*)\Dedicated Usage" + total size from DXGI.
+//! - Ping: ICMP echo to 1.1.1.1 on its own thread (every 2 s, only while polled).
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -22,12 +22,12 @@ use windows::Win32::System::Performance::{
     PDH_HCOUNTER, PDH_HQUERY,
 };
 
-/// 1.1.1.1 in Netzwerk-Byte-Reihenfolge.
+/// 1.1.1.1 in network byte order.
 const PING_TARGET: u32 = u32::from_le_bytes([1, 1, 1, 1]);
 const PING_EVERY: Duration = Duration::from_secs(2);
-/// Kein Abruf mehr seit so lange → Ping-Thread pausiert.
+/// The ping thread pauses after this long without a poll.
 const PING_IDLE: Duration = Duration::from_secs(5);
-/// "Kein Ping" (Zeitüberschreitung / offline).
+/// "No ping" (timeout / offline).
 const NO_PING: u64 = u64::MAX;
 
 pub struct SystemState(Mutex<Probe>);
@@ -42,18 +42,18 @@ struct Probe {
 
 struct Ping {
     ms: AtomicU64,
-    /// Letzter Abruf (ms seit Start), steuert, ob der Thread pingt.
+    /// Last poll (ms since start); decides whether the thread pings.
     wanted_at: Mutex<Instant>,
 }
 
-/// PDH-Abfrage für GPU-Auslastung und Grafikspeicher.
+/// PDH query for GPU load and VRAM.
 struct Gpu {
     query: PDH_HQUERY,
     util: PDH_HCOUNTER,
     mem: PDH_HCOUNTER,
 }
 
-// PDH-Handles sind Zeiger; Zugriff nur unter dem Mutex.
+// PDH handles are pointers; only touch them under the mutex.
 unsafe impl Send for Gpu {}
 
 impl Default for SystemState {
@@ -72,12 +72,12 @@ pub struct Stats {
     cpu_name: String,
     mem_used: u64,
     mem_total: u64,
-    /// None, wenn die GPU-Indikatoren fehlen.
+    /// None if the GPU counters are missing.
     gpu: Option<f64>,
     gpu_name: Option<String>,
     gpu_mem_used: u64,
     gpu_mem_total: u64,
-    /// Millisekunden; None = keine Antwort.
+    /// Milliseconds; None = no reply.
     ping: Option<u64>,
 }
 
@@ -119,20 +119,20 @@ impl Gpu {
                 return None;
             }
             let _ = PdhAddEnglishCounterW(query, w!("\\GPU Adapter Memory(*)\\Dedicated Usage"), 0, &mut mem);
-            // Auslastung ist eine Rate → braucht zwei Messungen; die erste hier.
+            // Load is a rate and needs two samples; this is the first.
             PdhCollectQueryData(query);
             Some(Self { query, util, mem })
         }
     }
 
-    /// (Auslastung %, belegter Grafikspeicher in Bytes)
+    /// (load %, used VRAM in bytes)
     fn read(&self) -> (Option<f64>, u64) {
         unsafe {
             if PdhCollectQueryData(self.query) != 0 {
                 return (None, 0);
             }
         }
-        // Pro Prozess eine Instanz → aufsummieren (wie der Task-Manager), gedeckelt bei 100.
+        // One instance per process: sum them up (like Task Manager), capped at 100.
         let util = sum_counter(self.util).map(|v| v.min(100.0));
         let mem = sum_counter(self.mem).unwrap_or(0.0) as u64;
         (util, mem)
@@ -146,7 +146,7 @@ fn sum_counter(counter: PDH_HCOUNTER) -> Option<f64> {
         if size == 0 {
             return None;
         }
-        // Puffer als u64 ausgerichtet; enthält Items + die Instanznamen dahinter.
+        // Buffer aligned as u64; holds the items followed by the instance names.
         let mut buf = vec![0u64; (size as usize).div_ceil(8)];
         let items = buf.as_mut_ptr() as *mut PDH_FMT_COUNTERVALUE_ITEM_W;
         if PdhGetFormattedCounterArrayW(counter, PDH_FMT_DOUBLE, &mut size, &mut count, Some(items)) != 0 {
@@ -157,7 +157,7 @@ fn sum_counter(counter: PDH_HCOUNTER) -> Option<f64> {
     }
 }
 
-/// Name und Grafikspeicher der stärksten echten GPU (meiste dedizierte VRAM).
+/// Name and VRAM of the strongest real GPU (most dedicated VRAM).
 fn adapter() -> Option<(String, Option<u64>)> {
     unsafe {
         let factory: IDXGIFactory1 = CreateDXGIFactory1().ok()?;
@@ -178,7 +178,7 @@ fn adapter() -> Option<(String, Option<u64>)> {
     }
 }
 
-/// "NVIDIA GeForce RTX 4070 Ti" → "GeForce RTX 4070 Ti"; "(R)", "(TM)", "CPU @ …" raus.
+/// "NVIDIA GeForce RTX 4070 Ti" → "GeForce RTX 4070 Ti"; strips "(R)", "(TM)", "CPU @ …".
 fn clean_name(name: &str) -> String {
     let mut s = name.replace("(R)", "").replace("(TM)", "").replace("(tm)", "");
     if let Some(i) = s.find(" @ ") {

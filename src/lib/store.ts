@@ -8,8 +8,8 @@ export interface Store<T> {
 }
 
 /**
- * Minimaler globaler Store. Mit `persist` wird der Zustand in localStorage
- * gespiegelt (in Tauri bleibt das WebView-Profil erhalten).
+ * Minimal global store. With `persist` the state is mirrored to localStorage
+ * (in Tauri the WebView profile persists).
  */
 export function createStore<T>(initial: T, options: { persist?: string } = {}): Store<T> {
   const key = options.persist && `notch:${options.persist}`;
@@ -19,7 +19,7 @@ export function createStore<T>(initial: T, options: { persist?: string } = {}): 
       const raw = localStorage.getItem(key);
       if (raw) state = JSON.parse(raw) as T;
     } catch {
-      // Kaputter Eintrag → mit Standardwert weiter.
+      // Broken entry → continue with the default.
     }
   }
 

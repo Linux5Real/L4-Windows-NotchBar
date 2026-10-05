@@ -44,7 +44,7 @@ const pages: { id: PageId; label: string; icon: Icon }[] = [
   { id: "accounts", label: "Verbindungen", icon: Plugs },
 ];
 
-/** Deep-Links anderer Tools (`navigate("settings", "<abschnitt>")`) → Seite, auf der der Abschnitt liegt. */
+/** Deep links from other tools (`navigate("settings", "<section>")`) → page holding that section. */
 const sectionPage: Record<string, PageId> = {
   weather: "general",
   updates: "general",
@@ -56,12 +56,12 @@ const sectionPage: Record<string, PageId> = {
   trading: "accounts",
 };
 
-/** Zuletzt offene Seite überlebt Schließen/Öffnen der Notch (Komponente wird neu gebaut). */
+/** Last open page survives closing/opening the notch (the component is rebuilt). */
 let savedPage: PageId = "general";
 
 /**
- * Einstellungen wie in macOS: links die Kategorien, rechts nur deren Inhalt.
- * Andere Tools springen per `navigate("settings", "<abschnitt>")` direkt zu ihrem Abschnitt.
+ * Settings like macOS: categories on the left, only their content on the right.
+ * Other tools jump straight to their section via `navigate("settings", "<section>")`.
  */
 export function SettingsView() {
   const { section } = nav.use();
@@ -75,7 +75,7 @@ export function SettingsView() {
   useEffect(() => {
     if (!section || !sectionPage[section]) return;
     setPage(sectionPage[section]);
-    // Erst nach dem Seitenwechsel existiert der Abschnitt.
+    // The section only exists after the page switch.
     const id = window.setTimeout(
       () => scroller.current?.querySelector<HTMLElement>(`#settings-${section}`)?.scrollIntoView({ behavior: "smooth", block: "start" }),
       120,
@@ -104,7 +104,7 @@ export function SettingsView() {
           );
         })}
       </nav>
-      {/* Ref am stabilen Container: popLayout reicht Refs nicht ans Kind durch. */}
+      {/* Ref on the stable container: popLayout doesn't pass refs to the child. */}
       <div ref={scroller} className="relative min-w-0 flex-1">
         <AnimatePresence mode="popLayout" initial={false}>
           <motion.div
@@ -146,7 +146,7 @@ export function SettingsView() {
   );
 }
 
-/** Version, Update-Suche und Installation auf Klick. Geladen wird nie ungefragt. */
+/** Version, update check and install on click. Nothing downloads unasked. */
 function Updates() {
   const auto = settings.use().updates.auto;
   const u = update.use();
@@ -346,7 +346,7 @@ function General() {
   );
 }
 
-/** Wo und wann die Notch erscheint. */
+/** Where and when the notch shows up. */
 function Display() {
   const s = settings.use();
   const d = s.display;
@@ -428,7 +428,7 @@ const discordStatus: Record<string, string> = {
   error: "Fehler",
 };
 
-/** Discord-Anruf: eigene Anwendung im Developer-Portal (nur so gibt Discord Sprach-Rechte frei). */
+/** Discord call: your own app in the developer portal (the only way Discord grants voice scopes). */
 function Discord() {
   const s = settings.use();
   const state = discordState.use();
@@ -461,7 +461,7 @@ const durations: { value: string; label: string }[] = [
   { value: "-1", label: "Bis Stopp" },
 ];
 
-/** Timer-Alarm: Ton, Lautstärke, Dauer — mit Probehören. */
+/** Timer alarm: sound, volume, duration, with preview. */
 function Alarm() {
   const a = settings.use().alarm;
   const [previewing, setPreviewing] = useState(false);
@@ -516,7 +516,7 @@ function Alarm() {
   );
 }
 
-/** AI-Nutzung: welche Abos angezeigt werden. Daten kommen aus den angemeldeten Apps. */
+/** AI usage: which plans are shown. Data comes from the signed-in apps. */
 const usageSources: { id: UsageId | "grok"; hint: string; available: boolean }[] = [
   { id: "claude", hint: "Über die Anmeldung von Claude Code", available: true },
   { id: "codex", hint: "Über die Anmeldung der Codex CLI", available: true },
@@ -554,7 +554,7 @@ function UsageProviders() {
   );
 }
 
-/** FPS ohne Admin: einmal freischalten statt die Notch jedes Mal als Administrator zu starten. */
+/** FPS without admin: unlock once instead of running the notch as administrator every time. */
 function FpsUnlockRow() {
   const [state, setState] = useState<"idle" | "busy" | "ok" | "relogin" | "cancelled" | "failed">("idle");
   const hint = {
@@ -584,7 +584,7 @@ function FpsUnlockRow() {
   );
 }
 
-/** Wetter-Ort: automatisch per IP oder fest gewählt — direkt hier, ohne ins Wetter-Tool zu springen. */
+/** Weather location: automatic via IP or fixed, right here without opening the weather tool. */
 function Weather() {
   const w = settings.use().weather;
   const [searching, setSearching] = useState(false);
@@ -623,7 +623,7 @@ function Weather() {
   );
 }
 
-/** Tools ein-/ausblenden und per Ziehen sortieren. Mindestens eins bleibt an. */
+/** Show/hide tools and drag to reorder. At least one stays on. */
 function Tools() {
   const s = settings.use();
   const enabledCount = s.tools.filter((x) => x.enabled).length;
@@ -676,8 +676,8 @@ function Tools() {
 }
 
 /**
- * Feld für einen Schlüssel. Gespeicherte Werte werden nie zurückgelesen —
- * nur "gespeichert ✓". Neu eintippen überschreibt, leer speichern löscht.
+ * Field for a key. Stored values are never read back, it only shows
+ * "saved ✓". Typing a new one overwrites it, saving empty deletes it.
  */
 function SecretRow({ name, label, hint, onSaved }: { name: SecretName; label: string; hint?: string; onSaved?: () => void }) {
   const [stored, setStored] = useState(false);

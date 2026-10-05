@@ -20,13 +20,13 @@ const statusText: Record<string, string> = {
 
 /*
  *   ┌────────────────────────────────────────────────────────┐
- *   │ [▣]  Zocken                                             │
- *   │      Die Runde                                          │
+ *   │ [▣]  Gaming                                             │
+ *   │      The Crew                                           │
  *   │  (◉) (◉) (○) (◉)                                        │
- *   │                         [ 🎙 ]  [ 🎧 ]  [ ☎ Auflegen ]  │
+ *   │                         [ 🎙 ]  [ 🎧 ]   [ ☎ Hang up ]  │
  *   └────────────────────────────────────────────────────────┘
- * Wie das Anruf-Menü der Dynamic Island: oben wer/wo, darunter die Leute im Channel
- * (grüner Ring = spricht), unten große runde Knöpfe. Auflegen ist rot.
+ * Like the Dynamic Island call menu: who/where on top, the people in the channel below
+ * (green ring = speaking), large round buttons at the bottom. Hang up is red.
  */
 export function DiscordView() {
   const s = discordState.use();
@@ -94,7 +94,7 @@ export function DiscordView() {
   );
 }
 
-/** Server-Icon; ohne Icon die Anfangsbuchstaben (wie Discord selbst). */
+/** Server icon; initials without one (like Discord itself). */
 export function GuildIcon({ call, size }: { call: DiscordCall; size: number }) {
   const name = call.guildName ?? call.channelName;
   const initials = name
@@ -114,7 +114,7 @@ export function GuildIcon({ call, size }: { call: DiscordCall; size: number }) {
   );
 }
 
-/** Bis zu 6 Avatare, grüner Ring beim Sprechen; Rest als "+n". */
+/** Up to 6 avatars, green ring while speaking; the rest as "+n". */
 function Members({ call }: { call: DiscordCall }) {
   const shown = call.members.slice(0, 6);
   const rest = call.members.length - shown.length;

@@ -1,16 +1,16 @@
-//! AI-Nutzung: Abo-Limits der lokal angemeldeten AI-Tools (wie OmniNotch).
-//! Gelesen wird nur, was die Tools selbst schon auf dem PC abgelegt haben — Tokens
-//! werden nie zurückgeschrieben oder weitergegeben.
+//! AI usage: plan limits of locally signed-in AI tools (like OmniNotch).
+//! Only reads what the tools already stored on this PC. Tokens are never written
+//! back or shared.
 //!
-//! - Claude (Claude Code): `api.anthropic.com/api/oauth/usage` mit dem OAuth-Token aus
-//!   `~/.claude/.credentials.json`. Streng limitiert → 5 min Cache, nach 429 Pause
-//!   (Retry-After, mind. 10 min). Letzter guter Stand liegt auf der Platte, damit ein
-//!   Neustart nicht sofort wieder abfragt und nie ein leerer Fehler erscheint.
-//! - ChatGPT (Codex CLI): live `chatgpt.com/backend-api/wham/usage` mit `~/.codex/auth.json`,
-//!   Rückfall: letzter `rate_limits`-Eintrag in `~/.codex/sessions/**.jsonl`.
-//! - Gemini (Gemini CLI): Code-Assist-Kontingent (`retrieveUserQuota`) mit dem Google-Login
-//!   aus `~/.gemini/oauth_creds.json`. Abgelaufene Tokens werden nur im Speicher erneuert.
-//! - Cursor: Anfragen des Monats über `cursor.com/api/usage` mit dem Login der Cursor-App.
+//! - Claude (Claude Code): `api.anthropic.com/api/oauth/usage` with the OAuth token from
+//!   `~/.claude/.credentials.json`. Strictly rate-limited → 5 min cache, pause after 429
+//!   (Retry-After, at least 10 min). The last good result is kept on disk so a restart
+//!   doesn't query right away and never shows an empty error.
+//! - ChatGPT (Codex CLI): live `chatgpt.com/backend-api/wham/usage` with `~/.codex/auth.json`,
+//!   fallback: last `rate_limits` entry in `~/.codex/sessions/**.jsonl`.
+//! - Gemini (Gemini CLI): Code Assist quota (`retrieveUserQuota`) with the Google login
+//!   from `~/.gemini/oauth_creds.json`. Expired tokens are only refreshed in memory.
+//! - Cursor: monthly requests via `cursor.com/api/usage` with the Cursor app's login.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -22,7 +22,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tauri::{AppHandle, Manager, State};
 
-/// Mindestabstand echter Abfragen je Anbieter.
+/// Minimum interval between real queries per provider.
 fn cache_for(id: &str) -> Duration {
     match id {
         "claude" => Duration::from_secs(5 * 60),
@@ -31,17 +31,17 @@ fn cache_for(id: &str) -> Duration {
 }
 const BACKOFF_429: Duration = Duration::from_secs(10 * 60);
 
-/// Öffentliche OAuth-Client-Daten der Gemini CLI (stehen im Open-Source-Code der CLI;
-/// "installed app"-Clients haben kein echtes Geheimnis).
+/// Public OAuth client data of the Gemini CLI (it's in the CLI's open-source code;
+/// "installed app" clients have no real secret).
 const GEMINI_CLIENT_ID: &str = "681255809395-oo8ft2oprdrnp9e3aqf6av3hmdib135j.apps.googleusercontent.com";
 const GEMINI_CLIENT_SECRET: &str = "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";
 
 #[derive(Default)]
 pub struct UsageState {
-    /// Letzter Stand je Anbieter + frühester Zeitpunkt (Unix-ms) der nächsten echten Abfrage.
+    /// Last result per provider + earliest time (Unix ms) of the next real query.
     cache: Mutex<HashMap<String, (u64, Provider)>>,
     loaded: Mutex<bool>,
-    /// Erneuerter Gemini-Token (läuft ~1 h).
+    /// Refreshed Gemini token (valid ~1 h).
     gemini_token: Mutex<Option<(String, u64)>>,
 }
 
@@ -51,10 +51,10 @@ pub struct Provider {
     id: String,
     plan: Option<String>,
     windows: Vec<Window>,
-    /// Fehlercode für das Frontend (übersetzt dort): not-found, not-signed-in, expired,
-    /// rate-limited, offline, failed. Bei vorhandenen `windows` = Daten sind veraltet.
+    /// Error code for the frontend (translated there): not-found, not-signed-in, expired,
+    /// rate-limited, offline, failed. With `windows` present, the data is stale.
     error: Option<String>,
-    /// Unix-ms, wann die Daten entstanden sind.
+    /// Unix ms when the data was produced.
     updated_at: u64,
 }
 
@@ -64,9 +64,9 @@ pub struct Window {
     /// session | weekly | weekly-opus | weekly-sonnet | daily | monthly | model:<Name>
     kind: String,
     used_percent: f64,
-    /// Unix-ms; None wenn unbekannt.
+    /// Unix ms; None if unknown.
     resets_at: Option<u64>,
-    /// Länge des Fensters in Sekunden (für die "im Plan"-Markierung).
+    /// Window length in seconds (for the "on track" marker).
     window_secs: Option<u64>,
 }
 
@@ -93,7 +93,7 @@ pub async fn usage_fetch(providers: Vec<String>, app: AppHandle, state: State<'_
         };
         let (provider, wait) = match (result, cached) {
             (Ok(p), _) => (p, cache_for(&id)),
-            // Fehler → letzten guten Stand behalten, nur den Fehler vermerken.
+            // Error → keep the last good result, just note the error.
             (Err(e), Some((_, mut old))) if !old.windows.is_empty() => {
                 let wait = e.wait.unwrap_or(cache_for(&id));
                 old.error = Some(e.code);
@@ -113,7 +113,7 @@ pub async fn usage_fetch(providers: Vec<String>, app: AppHandle, state: State<'_
 
 struct Fail {
     code: String,
-    /// Wann frühestens wieder fragen (bei 429).
+    /// Earliest time to ask again (after 429).
     wait: Option<Duration>,
 }
 
@@ -133,7 +133,7 @@ fn client() -> Result<reqwest::Client, Fail> {
     reqwest::Client::builder().timeout(Duration::from_secs(10)).build().map_err(|_| Fail::new("failed"))
 }
 
-/// HTTP-Status in Fehlercodes übersetzen; 429 mit Retry-After (mind. BACKOFF_429).
+/// Maps HTTP status to error codes; 429 uses Retry-After (at least BACKOFF_429).
 fn check(res: &reqwest::Response) -> Result<(), Fail> {
     match res.status().as_u16() {
         200 => Ok(()),
@@ -194,7 +194,7 @@ async fn fetch_claude() -> Result<Provider, Fail> {
 async fn fetch_codex() -> Result<Provider, Fail> {
     match fetch_codex_live().await {
         Ok(p) => Ok(p),
-        // Live klappt nicht (alte CLI, offline) → letzter Stand aus den Sitzungsdateien.
+        // Live failed (old CLI, offline) → last state from the session files.
         Err(live) => codex_from_sessions().ok_or(live),
     }
 }
@@ -229,8 +229,8 @@ async fn fetch_codex_live() -> Result<Provider, Fail> {
 
 fn codex_from_sessions() -> Option<Provider> {
     let sessions = home().join(".codex").join("sessions");
-    // Neueste zuerst nach Dateiname (enthält den Zeitstempel) — mtime ist unzuverlässig,
-    // weil Codex alte Dateien beim Fortsetzen neu schreibt.
+    // Newest first by file name (contains the timestamp); mtime is unreliable
+    // because Codex rewrites old files when resuming.
     for file in newest_files(&sessions, 15) {
         let Ok(text) = std::fs::read_to_string(&file) else { continue };
         for line in text.lines().rev() {
@@ -258,7 +258,7 @@ fn codex_window(w: &Value) -> Option<Window> {
     let minutes = w.get("window_minutes")?.as_u64()?;
     let mut used = w.get("used_percent")?.as_f64()?;
     let resets_at = w.get("resets_at").and_then(Value::as_u64).map(|s| s * 1000);
-    // Fenster inzwischen abgelaufen → wieder bei 0.
+    // Window has expired since → back to 0.
     if resets_at.is_some_and(|r| r < now_ms()) {
         used = 0.0;
     }
@@ -319,7 +319,7 @@ async fn fetch_gemini(state: &UsageState) -> Result<Provider, Fail> {
                 .collect()
         })
         .unwrap_or_default();
-    // Gleiche Modelle (Varianten) zusammenfassen: das knappste zählt. Höchstens drei zeigen.
+    // Merge variants of the same model (the tightest counts). Show at most three.
     windows.sort_by(|a, b| b.used_percent.total_cmp(&a.used_percent));
     let mut seen = std::collections::HashSet::new();
     windows.retain(|w| seen.insert(w.kind.clone()));
@@ -330,7 +330,7 @@ async fn fetch_gemini(state: &UsageState) -> Result<Provider, Fail> {
     Ok(Provider { id: "gemini".into(), plan, windows, error: None, updated_at: now_ms() })
 }
 
-/// Gültiger Access-Token der Gemini CLI; abgelaufen → im Speicher erneuern (Datei bleibt unberührt).
+/// Valid Gemini CLI access token; refreshed in memory if expired (the file is untouched).
 async fn gemini_token(state: &UsageState) -> Result<String, Fail> {
     let creds = read_json(&home().join(".gemini").join("oauth_creds.json")).ok_or("not-found")?;
     let expiry = creds["expiry_date"].as_u64().unwrap_or(0);
@@ -372,7 +372,7 @@ async fn fetch_cursor() -> Result<Provider, Fail> {
     let db = appdata.join("Cursor").join("User").join("globalStorage").join("state.vscdb");
     let bytes = std::fs::read(&db).map_err(|_| Fail::new("not-found"))?;
     let jwt = find_jwt_after(&bytes, b"cursorAuth/accessToken").ok_or("not-signed-in")?;
-    // "sub" im Token = "auth0|user_…" → Nutzer-ID für Abfrage und Cookie.
+    // "sub" in the token = "auth0|user_…" → user ID for the query and cookie.
     let payload = jwt.split('.').nth(1).and_then(|p| base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(p).ok()).ok_or("not-signed-in")?;
     let claims: Value = serde_json::from_slice(&payload).map_err(|_| Fail::new("not-signed-in"))?;
     let user = claims["sub"].as_str().and_then(|s| s.split('|').next_back()).ok_or("not-signed-in")?.to_string();
@@ -405,7 +405,7 @@ async fn fetch_cursor() -> Result<Provider, Fail> {
     Ok(Provider { id: "cursor".into(), plan: None, windows, error: None, updated_at: now_ms() })
 }
 
-/// Erstes JWT ("eyJ…") nach `key` in einer Binärdatei (SQLite-Datei von Cursor, ohne SQLite).
+/// First JWT ("eyJ…") after `key` in a binary file (Cursor's SQLite file, without SQLite).
 fn find_jwt_after(bytes: &[u8], key: &[u8]) -> Option<String> {
     let mut from = 0;
     while let Some(pos) = bytes[from..].windows(key.len()).position(|w| w == key) {
@@ -424,7 +424,7 @@ fn find_jwt_after(bytes: &[u8], key: &[u8]) -> Option<String> {
     None
 }
 
-// ---------- Cache auf der Platte ----------
+// ---------- Disk cache ----------
 
 fn cache_path(app: &AppHandle) -> Option<PathBuf> {
     let dir = app.path().app_data_dir().ok()?;
@@ -445,12 +445,12 @@ fn load_disk_cache(app: &AppHandle, state: &UsageState) {
 fn save_disk_cache(app: &AppHandle, state: &UsageState) {
     let Some(path) = cache_path(app) else { return };
     let cache = state.cache.lock().unwrap();
-    // Nur echte Daten sichern, keine reinen Fehler.
+    // Only store real data, not bare errors.
     let keep: HashMap<&String, &(u64, Provider)> = cache.iter().filter(|(_, (_, p))| !p.windows.is_empty()).collect();
     let _ = std::fs::write(path, serde_json::to_vec(&keep).unwrap_or_default());
 }
 
-// ---------- Hilfen ----------
+// ---------- Helpers ----------
 
 fn url_encode(s: &str) -> String {
     s.bytes().map(|b| if b.is_ascii_alphanumeric() || b"-._~".contains(&b) { (b as char).to_string() } else { format!("%{b:02X}") }).collect()
@@ -460,7 +460,7 @@ fn read_json(path: &Path) -> Option<Value> {
     std::fs::read(path).ok().and_then(|b| serde_json::from_slice(&b).ok())
 }
 
-/// Neueste `.jsonl`-Dateien unter sessions/YYYY/MM/DD, absteigend nach Pfad.
+/// Newest `.jsonl` files under sessions/YYYY/MM/DD, sorted by path descending.
 fn newest_files(root: &Path, limit: usize) -> Vec<PathBuf> {
     fn sorted_desc(dir: &Path) -> Vec<PathBuf> {
         let mut v: Vec<PathBuf> = std::fs::read_dir(dir).map(|r| r.flatten().map(|e| e.path()).collect()).unwrap_or_default();
@@ -498,7 +498,7 @@ fn capitalize(s: &str) -> String {
     c.next().map(|f| f.to_uppercase().chain(c).collect()).unwrap_or_default()
 }
 
-/// Minimaler ISO-8601-Parser ("2026-10-04T17:30:00.123+00:00" / "...Z") → Unix-ms.
+/// Minimal ISO 8601 parser ("2026-10-04T17:30:00.123+00:00" / "...Z") → Unix ms.
 fn parse_iso_ms(s: &str) -> Option<u64> {
     let (date, rest) = s.split_once('T')?;
     let mut d = date.split('-').map(|x| x.parse::<i64>().ok());
@@ -517,7 +517,7 @@ fn parse_iso_ms(s: &str) -> Option<u64> {
         }
         _ => 0,
     };
-    // Tage seit 1970 (Algorithmus von Howard Hinnant).
+    // Days since 1970 (Howard Hinnant's algorithm).
     let (y2, m2) = if m <= 2 { (y - 1, m + 9) } else { (y, m - 3) };
     let era = y2.div_euclid(400);
     let yoe = y2 - era * 400;
@@ -553,7 +553,7 @@ mod tests {
     }
 }
 
-/// Für Backend-Tests ohne Tauri-Laufzeit: Claude + ChatGPT, nur Fehlercodes/Zähler.
+/// For backend tests without the Tauri runtime: Claude + ChatGPT, error codes/counters only.
 #[doc(hidden)]
 pub async fn probe_for_test() -> Vec<(String, Result<usize, String>)> {
     let state = UsageState::default();

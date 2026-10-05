@@ -8,11 +8,11 @@ import { system } from "./store";
 
 /*
  *   ╭──────────────────────────────────────────────────────────────╮
- *   │ 144 FPS  CPU 23%          (Kamera)          GPU 87%  RAM 42% │
+ *   │ 144 FPS  CPU 23%          (camera)          GPU 87%  RAM 42% │
  *   ╰──────────────────────────────────────────────────────────────╯
- * Gaming-Modus in der geschlossenen Notch: links FPS + CPU, rechts GPU + RAM.
- * Text statt Symbolen — auf 12 px liest man "GPU" schneller als ein Chip-Icon.
- * Monochrom; Werte werden erst orange/rot, wenn es eng wird.
+ * Gaming mode in the closed notch: FPS + CPU on the left, GPU + RAM on the right.
+ * Text instead of icons; at 12 px "GPU" reads faster than a chip icon.
+ * Monochrome; values only turn orange/red when things get tight.
  */
 export function LiveGaming() {
   useFpsPolling();
@@ -30,7 +30,7 @@ export function LiveGaming() {
       <div className="flex items-center gap-3">
         <span className="flex items-baseline gap-1" title={f.error === "no-admin" ? t("FPS freischalten: Einstellungen → Darstellung") : undefined}>
           <span className="tabular flex w-[26px] justify-end text-footnote font-semibold text-label">
-            {/* Schloss = noch keine Rechte (Einstellungen → Darstellung), Strich = noch kein Frame gemessen. */}
+            {/* Lock = no permission yet (Settings → Display), dash = no frame measured yet. */}
             {f.error === "no-admin" ? <LockSimple size={11} weight="bold" className="self-center text-label-3" /> : f.value === null ? "–" : Math.round(f.value)}
           </span>
           <span className="text-caption font-medium text-label-3">FPS</span>

@@ -11,7 +11,7 @@ import { BrandLogo, brandName } from "../../ui/brands";
 import { Button, Empty, Skeleton } from "../../ui/controls";
 import { t } from "../../i18n";
 
-/** Rust cached je Anbieter (Claude 5 min); öfter fragen kostet nichts. */
+/** Rust caches per provider (Claude 5 min), so polling more often costs nothing. */
 const POLL_MS = 60_000;
 
 const windowLabel: Record<string, string> = {
@@ -36,9 +36,9 @@ export const usageError: Record<string, string> = {
  *   ┌ ✳ Claude  Max ───────┐ ┌ ⌘ ChatGPT  Plus ─────┐
  *   │ Session      44 %    │ │ Session      71 %    │
  *   │ ━━━━━━━━━──────────── │ │ ━━━━━━━━━━━━━━━───── │
- *   │ in 2 Std.  56 % übrig│ │ in 48 Min. 29 % übrig│
+ *   │ in 2 h     56 % left │ │ in 48 min  29 % left │
  *   └──────────────────────┘ └──────────────────────┘
- * Wie OmniNotch: eine Karte pro Anbieter, je Limit-Fenster ein Balken.
+ * Like OmniNotch: one card per provider, one bar per limit window.
  */
 export function UsageView() {
   const enabled = settings.use().usage;

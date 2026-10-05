@@ -14,7 +14,7 @@ interface Todo {
 
 const todos = createStore<Todo[]>([], { persist: "todos" });
 
-// Markierte oben, erledigte unten, sonst Eingabereihenfolge.
+// Flagged on top, done at the bottom, otherwise in input order.
 const order = (t: Todo) => (t.done ? 2 : t.starred ? 0 : 1);
 
 export function TodosView() {

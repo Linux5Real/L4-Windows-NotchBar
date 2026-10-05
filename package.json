@@ -1,7 +1,7 @@
 {
   "name": "l4-notchbar",
   "private": true,
-  "version": "0.1.1",
+  "version": "1.0.0",
   "license": "GPL-3.0-only",
   "type": "module",
   "scripts": {

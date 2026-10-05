@@ -15,16 +15,16 @@ import { settings, updateSettings } from "../../settings/store";
 import { lang, t } from "../../i18n";
 
 /*
- * Wetterdaten über Open-Meteo (kostenlos, ohne Schlüssel). Genutzt vom Wetter-Tool
- * und von der Übersicht. Ort: beim ersten Start per IP erkannt ("auto"); wer selbst
- * einen Ort wählt, behält ihn.
+ * Weather data via Open-Meteo (free, no key). Used by the weather tool and the
+ * overview. Location: detected via IP on first start ("auto"); a location you pick
+ * yourself stays.
  */
 export interface Forecast {
   current: { temp: number; feels: number; code: number; wind: number; day: boolean };
   daily: { date: string; code: number; max: number; min: number; rain: number }[];
 }
 
-/** WMO-Wettercodes → Symbol + Text. */
+/** WMO weather codes → icon + text. */
 export function describe(code: number, day = true): { icon: Icon; text: string } {
   if (code === 0) return { icon: day ? Sun : Moon, text: t("Klar") };
   if (code <= 2) return { icon: day ? CloudSun : CloudMoon, text: t(code === 1 ? "Überwiegend klar" : "Teils bewölkt") };
@@ -74,7 +74,7 @@ export interface Place {
   lon: number;
 }
 
-/** Ortssuche (Geocoding von Open-Meteo). */
+/** Location search (Open-Meteo geocoding). */
 export async function searchPlaces(q: string): Promise<Place[]> {
   const r = await (await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=4&language=${lang()}`)).json();
   return (r.results ?? []).map((p: { name: string; admin1?: string; country?: string; latitude: number; longitude: number }) => ({
@@ -85,12 +85,12 @@ export async function searchPlaces(q: string): Promise<Place[]> {
   }));
 }
 
-/** Ort selbst gewählt → bleibt fest, keine IP-Erkennung mehr. */
+/** Location picked by hand → stays fixed, no more IP detection. */
 export function choosePlace(p: Place) {
   updateSettings({ weather: { name: p.name, lat: p.lat, lon: p.lon, auto: false } });
 }
 
-/** Ungefährer Ort aus der IP (Stadt-genau). Zwei Dienste ohne Schlüssel, der zweite als Ersatz. */
+/** Approximate location from the IP (city level). Two keyless services, the second as fallback. */
 async function placeFromIp(): Promise<{ name: string; lat: number; lon: number } | null> {
   const sources = ["https://get.geojs.io/v1/ip/geo.json", "https://ipwho.is/"];
   for (const url of sources) {
@@ -100,7 +100,7 @@ async function placeFromIp(): Promise<{ name: string; lat: number; lon: number }
       const lon = Number(r.longitude);
       if (typeof r.city === "string" && r.city && Number.isFinite(lat) && Number.isFinite(lon)) return { name: r.city, lat, lon };
     } catch {
-      // Nächster Dienst.
+      // Next service.
     }
   }
   return null;
@@ -109,8 +109,8 @@ async function placeFromIp(): Promise<{ name: string; lat: number; lon: number }
 let detecting: Promise<boolean> | null = null;
 
 /**
- * Ort per IP setzen, wenn noch keiner gewählt oder "automatisch" eingestellt ist —
- * einmal pro Start. `force` = Nutzer hat "automatisch" gewählt.
+ * Sets the location via IP if none is picked yet or "automatic" is on, once per
+ * start. `force` = the user picked "automatic".
  */
 export function detectPlace(force = false): Promise<boolean> {
   const w = settings.get().weather;
@@ -119,7 +119,7 @@ export function detectPlace(force = false): Promise<boolean> {
   detecting = placeFromIp().then((p) => {
     const cur = settings.get().weather;
     if (!p) return !!cur;
-    // Nicht überschreiben, wenn der Nutzer inzwischen selbst gewählt hat.
+    // Don't overwrite if the user has picked one in the meantime.
     if (!force && cur && !cur.auto) return true;
     updateSettings({ weather: { ...p, auto: true } });
     return true;
@@ -127,7 +127,7 @@ export function detectPlace(force = false): Promise<boolean> {
   return detecting;
 }
 
-/** Vorhersage für den eingestellten Ort; null solange lädt oder kein Ort, "error" bei Fehler. */
+/** Forecast for the set location; null while loading or without a location, "error" on failure. */
 export function useForecast(): Forecast | null | "error" {
   const place = settings.use().weather;
   const [data, setData] = useState<Forecast | null | "error">(null);
@@ -147,5 +147,5 @@ export function useForecast(): Forecast | null | "error" {
   return place ? data : null;
 }
 
-// Beim Start: erster Start oder "automatisch" → Ort aus der IP (selbst gewählt bleibt unberührt).
+// On start: first run or "automatic" → location from IP (a hand-picked one stays).
 void detectPlace();

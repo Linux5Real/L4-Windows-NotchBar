@@ -2,9 +2,9 @@ import { forwardRef, type ReactNode } from "react";
 import type { Icon, IconProps } from "@phosphor-icons/react";
 
 /*
- * Anbieter-Logos, einfarbig (currentColor) wie bei OmniNotch. Es sind die offiziellen
- * Markenformen: Claude, ChatGPT (OpenAI), Gemini und Cursor exakt aus simple-icons
- * (24×24), Grok aus dem offiziellen xAI-SVG, auf 24×24 normiert.
+ * Provider logos, single color (currentColor) like OmniNotch. These are the official
+ * brand marks: Claude, ChatGPT (OpenAI), Gemini and Cursor exactly from simple-icons
+ * (24×24), Grok from the official xAI SVG, normalized to 24×24.
  */
 export type BrandId = "claude" | "codex" | "gemini" | "cursor" | "grok";
 
@@ -24,7 +24,7 @@ export function BrandLogo({ id, size = 14, className }: { id: BrandId; size?: nu
   );
 }
 
-/** Echtes Discord-Mark (offizieller simple-icons-Pfad), phosphor-kompatibel für <Empty icon={DiscordLogo} />. */
+/** Real Discord mark (official simple-icons path), Phosphor-compatible for <Empty icon={DiscordLogo} />. */
 export const DiscordLogo: Icon = forwardRef<SVGSVGElement, IconProps>(
   ({ size = 22, className }, ref) => (
     <svg ref={ref} width={size} height={size} viewBox="0 0 24 24" className={className} aria-hidden fill="currentColor">

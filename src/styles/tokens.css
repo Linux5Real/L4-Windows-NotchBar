@@ -1,36 +1,36 @@
 /*
- * Design-Tokens — die einzige Quelle für Farben, Schrift, Radien, Kurven.
- * Regeln und Begründungen: docs/DESIGN.md. Keine Hex-Werte in Komponenten.
+ * Design tokens: the single source for colors, type, radii and curves.
+ * No hex values in components.
  */
 @theme {
-  /* Fläche: die Notch ist immer reines Schwarz (verschmilzt optisch mit dem Bildschirmrand). */
+  /* Surface: the notch is always pure black (blends into the screen edge). */
   --color-notch: #000;
 
-  /* Text: Weiß mit abgestuften Deckkräften statt Grautönen (wie Apples Label-Farben). */
+  /* Text: white at stepped opacities instead of grays (like Apple's label colors). */
   --color-label: rgb(255 255 255 / 0.96);
   --color-label-2: rgb(255 255 255 / 0.58);
   --color-label-3: rgb(255 255 255 / 0.34);
   --color-label-4: rgb(255 255 255 / 0.18);
 
-  /* Füllungen für Buttons, Tracks, Karten — nie eigene Graustufen erfinden. */
+  /* Fills for buttons, tracks, cards; never invent your own grays. */
   --color-fill-1: rgb(255 255 255 / 0.06);
   --color-fill-2: rgb(255 255 255 / 0.1);
   --color-fill-3: rgb(255 255 255 / 0.16);
   --color-separator: rgb(255 255 255 / 0.08);
-  /* Schwebende Flächen über der Notch (Menüs, Popover). */
+  /* Floating surfaces above the notch (menus, popovers). */
   --color-elevated: #1c1c1e;
 
-  /* Systemfarben (Dark-Mode-Varianten). */
+  /* System colors (dark mode variants). */
   --color-green: #30d158;
   --color-red: #ff453a;
   --color-orange: #ff9f0a;
   --color-yellow: #ffd60a;
-  /* Links (Apples Dark-Mode-Linkfarbe). */
+  /* Links (Apple's dark mode link color). */
   --color-link: #419cff;
 
   --font-sans: "Inter Variable", "Segoe UI Variable Text", system-ui, sans-serif;
 
-  /* Typo-Skala: Größe / Zeilenhöhe / Tracking. Tracking wird mit steigender Größe enger. */
+  /* Type scale: size / line height / tracking. Tracking gets tighter as size grows. */
   --text-caption: 11px;
   --text-caption--line-height: 14px;
   --text-caption--letter-spacing: 0.01em;
@@ -47,20 +47,20 @@
   --text-display--line-height: 26px;
   --text-display--letter-spacing: -0.022em;
 
-  /* Kurven für alles, was keine Spring ist (Farbe, Opazität, Press-Feedback). */
+  /* Curves for everything that isn't a spring (color, opacity, press feedback). */
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
   --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
 
-  /* Radien innerhalb der Notch — konzentrisch: innen = außen − Abstand. */
+  /* Radii inside the notch, concentric: inner = outer − padding. */
   --radius-xs: 4px;
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 16px;
 }
 
-/* Akzent kommt zur Laufzeit aus dem Cover (--accent am Notch-Container).
-   "inline", damit die Variable am Element aufgelöst wird statt an :root. */
+/* The accent comes from the cover at runtime (--accent on the notch container).
+   "inline" so the variable resolves on the element instead of :root. */
 @theme inline {
   --color-accent: var(--accent);
 }

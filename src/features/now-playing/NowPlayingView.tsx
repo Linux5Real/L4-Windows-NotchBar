@@ -8,8 +8,8 @@ import { Equalizer } from "./Equalizer";
 import { t } from "../../i18n";
 
 /*
- * Aufbau wie die erweiterte Dynamic Island:
- *   [Cover] Titel / Künstler                 [EQ]
+ * Layout like the expanded Dynamic Island:
+ *   [Cover] Title / Artist                   [EQ]
  *   0:52 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -3:10
  *              ⏮      ⏯      ⏭
  */
@@ -42,14 +42,14 @@ export function NowPlayingView() {
   );
 }
 
-/** Geteilt mit der Übersicht: Klick auf die Aktivität lässt das Cover hierher fliegen. */
+/** Shared with the overview: clicking the activity flies the cover here. */
 export const ARTWORK_LAYOUT_ID = "now-playing-artwork";
 
 function Artwork({ np }: { np: NowPlaying }) {
   return (
-    // Äußere Hülle fliegt (Layout), innere skaliert bei Pause — getrennt, sonst streiten beide um transform.
+    // Outer wrapper flies (layout), inner one scales on pause; separate so they don't fight over transform.
     <motion.div layoutId={ARTWORK_LAYOUT_ID} transition={springs.morph} className="size-14 shrink-0">
-      {/* Pausiert: Cover schrumpft leicht zurück und dunkelt ab, wie bei Apple Music. */}
+      {/* Paused: the cover shrinks back slightly and dims, like Apple Music. */}
       <motion.div
         className="relative size-14 shrink-0"
         initial={false}
@@ -69,7 +69,7 @@ function Artwork({ np }: { np: NowPlaying }) {
               exit={{ opacity: 0, transition: { duration: 0.4 } }}
             />
           ) : (
-            // Kein Cover (manche Browser-Player): ruhiger Platzhalter statt Lücke.
+            // No cover (some browser players): a calm placeholder instead of a gap.
             <motion.div
               key="placeholder"
               className="absolute inset-0 flex items-center justify-center rounded-[12px] bg-fill-2 text-label-3"
@@ -93,13 +93,13 @@ function Artwork({ np }: { np: NowPlaying }) {
 }
 
 /**
- * Fortschritt + Spulen. Ziehen oder Klicken springt an die Stelle; beim Greifen wird
- * der Balken dicker und heller, die Zeiten zeigen die Zielposition (wie Apple Music).
- * Der Sprung passiert erst beim Loslassen — ein Seek pro Geste.
+ * Progress + seeking. Drag or click to jump; while grabbed the bar gets thicker and
+ * brighter and the times show the target (like Apple Music).
+ * The seek only happens on release, one seek per gesture.
  */
 function Progress({ np }: { np: NowPlaying }) {
   const track = useRef<HTMLDivElement>(null);
-  // Zielposition (0..1) während des Ziehens; Ref für den Frame-Loop, State für die Zeiten.
+  // Target position (0..1) while dragging; ref for the frame loop, state for the times.
   const scrubRef = useRef<number | null>(null);
   const [scrub, setScrub] = useState<number | null>(null);
   const [hover, setHover] = useState(false);
@@ -112,7 +112,7 @@ function Progress({ np }: { np: NowPlaying }) {
   };
   const progress = useMotionValue(ratio());
   useAnimationFrame(() => progress.set(ratio()));
-  // Verschieben statt Strecken: kein verzerrtes rundes Ende, keine Raster-Artefakte beim Spulen.
+  // Translate instead of stretch: no distorted round end, no raster artifacts while seeking.
   const transform = useTransform(progress, (p) => `translateX(${((p - 1) * 100).toFixed(3)}%)`);
 
   const [, tick] = useState(0);
@@ -121,7 +121,7 @@ function Progress({ np }: { np: NowPlaying }) {
     return () => clearInterval(id);
   }, []);
 
-  // Unbekannte Dauer (Livestream): Zeile bleibt als Platzhalter, damit nichts springt.
+  // Unknown duration (live stream): keep the row as a placeholder so nothing jumps.
   if (np.duration <= 0) return <div className="mt-3.5 h-[14px]" />;
 
   const pos = scrub !== null ? scrub * np.duration : livePosition(np);
@@ -148,7 +148,7 @@ function Progress({ np }: { np: NowPlaying }) {
       <span className={`tabular w-9 text-caption font-medium transition-colors duration-150 ${scrub !== null ? "text-label" : "text-label-3"}`}>
         {format(pos)}
       </span>
-      {/* Trefferzone höher als der Balken, damit man ihn leicht greift. */}
+      {/* Hit area taller than the bar so it's easy to grab. */}
       <div
         ref={track}
         className={`relative flex h-4 flex-1 items-center ${np.canSeek ? "touch-none" : ""}`}

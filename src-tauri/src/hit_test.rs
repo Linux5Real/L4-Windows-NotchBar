@@ -1,14 +1,14 @@
-//! Klick-Durchlass für das transparente Notch-Fenster.
+//! Click-through for the transparent notch window.
 //!
-//! Tauri kann nur das ganze Fenster klick-durchlässig machen. Deshalb pollt ein
-//! Thread die globale Mausposition und schaltet `set_ignore_cursor_events` um,
-//! je nachdem ob die Maus über der Trefferzone liegt, die das Frontend meldet.
-//! Gleichzeitig ersetzt das `notch://hover`-Event pointerenter/-leave, denn ein
-//! durchlässiges WebView bekommt keine Mausereignisse mehr.
+//! Tauri can only make the whole window click-through, so a thread polls the
+//! global cursor position and toggles `set_ignore_cursor_events` depending on
+//! whether the cursor is over the hit zone reported by the frontend.
+//! The `notch://hover` event replaces pointerenter/leave, because a click-through
+//! WebView no longer gets mouse events.
 //!
-//! Fokus-Modus (`passthrough`): Das Fenster bleibt immer durchlässig, auch über der
-//! Notch — Klicks landen in der App darunter (z. B. Browser-Tabs). Drei schnelle Klicks
-//! auf die Notch melden `notch://focus-exit`; dafür wird nur die Maustaste beobachtet.
+//! Focus mode (`passthrough`): the window stays click-through even over the notch,
+//! so clicks reach the app below (e.g. browser tabs). Three quick clicks on the notch
+//! emit `notch://focus-exit`; only the mouse button is watched for that.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
@@ -19,7 +19,7 @@ use serde::Deserialize;
 use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow};
 use windows::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_LBUTTON};
 
-/// Trefferzone in CSS-Pixeln, relativ zur linken oberen Fensterecke.
+/// Hit zone in CSS px, relative to the window's top-left corner.
 #[derive(Clone, Copy, Default, Deserialize)]
 pub struct HitRect {
     x: f64,
@@ -33,24 +33,24 @@ impl HitRect {
         x >= self.x && x <= self.x + self.w && y >= self.y && y <= self.y + self.h
     }
 
-    /// Größere Zone, solange die Maustaste gedrückt ist: Dateien lassen sich so leichter
-    /// auf die kleine geschlossene Notch ziehen (Quick Drop).
+    /// Larger zone while a mouse button is held, so files are easier to drop onto
+    /// the small closed notch (quick drop).
     fn grown(&self) -> HitRect {
         HitRect { x: self.x - DROP_MARGIN, y: self.y, w: self.w + DROP_MARGIN * 2.0, h: self.h + DROP_MARGIN }
     }
 }
 
-/// Zusätzlicher Rand der Drop-Zone in CSS-px.
+/// Extra margin of the drop zone in CSS px.
 const DROP_MARGIN: f64 = 48.0;
 
 #[derive(Default)]
 pub struct HitState {
     rect: Mutex<HitRect>,
-    /// Solange true (z. B. beim Tippen), bleibt das Fenster klickbar.
+    /// While true (e.g. typing), the window stays clickable.
     pinned: Mutex<bool>,
-    /// Gesetzt nach show(): Klick-Durchlass beim nächsten Poll neu anwenden.
+    /// Set after show(): reapply click-through on the next poll.
     refresh: AtomicBool,
-    /// Fokus-Modus: immer durchlässig, kein Hover.
+    /// Focus mode: always click-through, no hover.
     passthrough: AtomicBool,
 }
 
@@ -75,15 +75,15 @@ pub fn set_pinned(pinned: bool, state: State<'_, HitState>) {
     *state.pinned.lock().unwrap() = pinned;
 }
 
-/// ~60 Hz reicht: Hover-Verzögerungen liegen ohnehin bei 180–220 ms.
+/// ~60 Hz is plenty: hover delays are 180–220 ms anyway.
 const POLL: Duration = Duration::from_millis(16);
-/// Fokus-Modus verlassen: so viele Klicks auf die Notch, je höchstens `CLICK_GAP` auseinander.
+/// Leaving focus mode: this many clicks on the notch, each at most `CLICK_GAP` apart.
 const EXIT_CLICKS: u32 = 3;
 const CLICK_GAP: Duration = Duration::from_millis(450);
 
 pub fn spawn(app: AppHandle, window: WebviewWindow) {
     thread::spawn(move || {
-        // `None` erzwingt beim ersten Durchlauf einen definierten Zustand.
+        // `None` forces a defined state on the first pass.
         let mut last_inside: Option<bool> = None;
         let mut last_ignore: Option<bool> = None;
         let mut was_down = false;
@@ -108,7 +108,7 @@ pub fn spawn(app: AppHandle, window: WebviewWindow) {
             let passthrough = state.passthrough.load(Ordering::Relaxed);
 
             if passthrough {
-                // Klicks nur zählen (Flanke der Maustaste), nie abfangen.
+                // Only count clicks (button edges), never swallow them.
                 if dragging && !was_down && rect.contains(x, y) {
                     clicks = if last_click.elapsed() <= CLICK_GAP { clicks + 1 } else { 1 };
                     last_click = Instant::now();
@@ -133,7 +133,7 @@ pub fn spawn(app: AppHandle, window: WebviewWindow) {
             let inside = if dragging { rect.grown() } else { rect }.contains(x, y);
             let ignore = !inside && !*state.pinned.lock().unwrap();
 
-            // Nur bei Änderung aufrufen: jeder Aufruf geht über den Event-Loop.
+            // Only call on change: every call goes through the event loop.
             if last_ignore != Some(ignore) {
                 let _ = window.set_ignore_cursor_events(ignore);
                 last_ignore = Some(ignore);

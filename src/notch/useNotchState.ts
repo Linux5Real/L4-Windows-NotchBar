@@ -5,16 +5,16 @@ import { hoverDelayMs, settings } from "../settings/store";
 
 export type NotchStatus = "closed" | "peek" | "open";
 
-/** Verzögerungen in ms. Die Hover-Verzögerung kommt aus den Einstellungen. */
+/** Delays in ms. The hover delay comes from the settings. */
 export const timing = {
-  /** Gnadenfrist beim Verlassen, damit kurzes Abrutschen nicht schließt. */
+  /** Grace period on leave, so slipping off briefly doesn't close it. */
   leaveClose: 180,
 };
 
 /*
- * "Festhalten": Solange gezogen wird (Spulen, später Drag & Drop), bleibt die Notch
- * offen und klickbar, auch wenn die Maus sie kurz verlässt. Zähler, damit mehrere
- * Stellen gleichzeitig festhalten können.
+ * "Hold": while dragging (seeking, drag and drop) the notch stays open and
+ * clickable even if the cursor leaves briefly. A counter, so several places
+ * can hold at once.
  */
 const holds = createStore(0);
 
@@ -24,10 +24,10 @@ export function holdOpen(on: boolean) {
 }
 
 /*
- * Pinnadel (oben rechts): Die Notch bleibt offen, auch wenn die Maus sie verlässt oder
- * eine andere App den Fokus bekommt — z. B. um Dateien aus dem Explorer zu ziehen oder
- * einen Schlüssel aus dem Browser zu kopieren. Anders als `holdOpen` bleibt das Fenster
- * außerhalb der Notch klick-durchlässig. Esc / Tastenkürzel schließen und lösen sie.
+ * Pin (top right): the notch stays open even when the cursor leaves or another
+ * app takes focus, e.g. to drag files from Explorer or copy a key from the
+ * browser. Unlike `holdOpen`, the window stays click-through outside the notch.
+ * Esc / the shortcut close and unpin it.
  */
 export const pinned = createStore(false);
 
@@ -36,17 +36,17 @@ export function togglePin() {
 }
 
 /**
- * Zustandsautomat der Notch:
+ * Notch state machine:
  *
- *   closed ──hover──▶ peek ──hover gehalten / Klick──▶ open
+ *   closed ──hover──▶ peek ──hover held / click──▶ open
  *     ▲                 │                               │
- *     └────verlassen────┘◀──verlassen (Gnadenfrist) / Esc / Klick außerhalb
+ *     └────leave────┘◀──leave (grace) / Esc / click outside
  *
- *   Tastenkürzel: closed ⇄ open direkt, ohne Peek und ohne Verzögerung.
- *   Beim Tippen, Festhalten oder mit Pinnadel schließt Verlassen nicht.
+ *   Shortcut: closed ⇄ open directly, no peek and no delay.
+ *   While typing, holding or pinned, leaving doesn't close.
  *
- *   close()   bewusst schließen (Esc, Tastenkürzel) — löst auch die Pinnadel.
- *   dismiss() beiläufig schließen (Klick außerhalb, Fokusverlust) — nicht, wenn gepinnt.
+ *   close()   close on purpose (Esc, shortcut), also unpins.
+ *   dismiss() close casually (click outside, focus loss), not when pinned.
  */
 export function useNotchState() {
   const [status, setStatusState] = useState<NotchStatus>("closed");
@@ -84,7 +84,7 @@ export function useNotchState() {
     setStatus("closed");
   }, [setStatus]);
 
-  /** Für das Tastenkürzel: ohne Peek direkt auf/zu. Gibt den neuen Zustand zurück. */
+  /** For the shortcut: open/close directly without peek. Returns the new state. */
   const toggle = useCallback((): NotchStatus => {
     if (statusRef.current === "open") {
       close();
@@ -99,7 +99,7 @@ export function useNotchState() {
     window.clearTimeout(timer.current);
     if (statusRef.current === "closed") {
       setStatus("peek");
-      // Modus "Klick": nur anstupsen, öffnen erst per Klick.
+      // "Click" mode: only nudge, open on click.
       const s = settings.get();
       if (s.openMode === "hover") later(hoverDelayMs[s.hoverDelay], "open");
     }
@@ -112,7 +112,7 @@ export function useNotchState() {
     else if (statusRef.current === "open" && mayAutoClose()) later(timing.leaveClose, "closed");
   }, [setStatus, later]);
 
-  // Festhalten vorbei und Maus ist draußen → jetzt das verpasste Verlassen nachholen.
+  // Hold ended and the cursor is outside → handle the missed leave now.
   useEffect(
     () =>
       holds.subscribe(() => {
@@ -123,7 +123,7 @@ export function useNotchState() {
     [later],
   );
 
-  // Pinnadel gelöst und Maus ist draußen → jetzt schließen.
+  // Unpinned and the cursor is outside → close now.
   useEffect(
     () =>
       pinned.subscribe(() => {
@@ -132,7 +132,7 @@ export function useNotchState() {
     [later],
   );
 
-  // Esc schließt ohne Umweg.
+  // Esc closes directly.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && close();
     window.addEventListener("keydown", onKey);

@@ -1,7 +1,7 @@
 import type { MediaSource, NowPlaying } from "./types";
 import { livePosition } from "./types";
 
-// Generierte Cover als SVG, damit der Prototyp ohne externe Bilder auskommt.
+// Generated SVG covers so the prototype needs no external images.
 function cover(a: string, b: string, c: string): string {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
     <defs>
@@ -54,7 +54,7 @@ export function createMockMedia(): MediaSource {
     set({ ...tracks[index], position: 0, isPlaying: true });
   };
 
-  // Track-Ende simulieren.
+  // Simulate the end of a track.
   setInterval(() => {
     if (state.isPlaying && livePosition(state) >= state.duration) load(index + 1);
   }, 1000);

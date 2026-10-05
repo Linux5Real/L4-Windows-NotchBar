@@ -4,7 +4,7 @@ import { content, pulse } from "../../design/motion";
 import { formatClock, ringing, timer, useRemaining } from "./store";
 import { t } from "../../i18n";
 
-/** Geschlossene Notch bei laufendem/abgelaufenem Timer: Symbol links, Countdown rechts. Abgelaufen bleibt bis zum Schließen. */
+/** Closed notch with a running/finished timer: icon left, countdown right. Finished stays until dismissed. */
 export function LiveTimer() {
   const s = timer.use();
   const ring = ringing.use();

@@ -1,20 +1,20 @@
-//! FPS für den Gaming-Modus: zählt Present-Aufrufe des Vordergrundprozesses per ETW
-//! (wie PresentMon, nur stark vereinfacht).
+//! FPS for gaming mode: counts present calls of the foreground process via ETW
+//! (like PresentMon, heavily simplified).
 //!
-//! - Quellen: Microsoft-Windows-DXGI (Present_Start, D3D10–12), Microsoft-Windows-D3D9 und
-//!   Microsoft-Windows-DxgKrnl (Present/PresentHistory/Blit im Kernel). Über DxgKrnl laufen
-//!   alle APIs — damit zählen auch OpenGL (z. B. Minecraft Java) und Vulkan.
-//! - Ein Frame löst je nach API mehrere dieser Events aus. Deshalb wird pro Event-Art
-//!   getrennt gezählt und die größte Zahl genommen — nie die Summe.
-//! - Echtzeit-ETW braucht Rechte. `fps_unlock` startet die App einmal erhöht (UAC-Abfrage
-//!   als "L4-Notchbar") und gibt dem Konto:
-//!     1. direkte ETW-Rechte auf die eigene Sitzungs-GUID und die drei Provider — wirken
-//!        sofort, ohne Abmelden;
-//!     2. zusätzlich die Gruppe "Leistungsprotokollbenutzer" als Rückfallebene (wirkt erst
-//!        nach der nächsten Anmeldung).
-//!   Ohne Rechte liefert `gaming_fps` "no-admin" und versucht es alle paar Sekunden neu.
-//! - Die Sitzung läuft nur, solange abgefragt wird (`IDLE`), und überlebt sonst einen
-//!   Absturz — deshalb wird eine alte Sitzung gleichen Namens beim Start beendet.
+//! - Sources: Microsoft-Windows-DXGI (Present_Start, D3D10–12), Microsoft-Windows-D3D9 and
+//!   Microsoft-Windows-DxgKrnl (present/history/blit in the kernel). Every API goes through
+//!   DxgKrnl, so OpenGL (e.g. Minecraft Java) and Vulkan count too.
+//! - One frame can fire several of these events depending on the API, so each event
+//!   kind is counted separately and the highest count wins, never the sum.
+//! - Real-time ETW needs permissions. `fps_unlock` runs the app elevated once (UAC prompt
+//!   shows "L4-Notchbar") and gives the account:
+//!     1. ETW rights on our own session GUID and the three providers. These apply
+//!        immediately, no sign-out needed.
+//!     2. membership in "Performance Log Users" as a fallback (applies after the
+//!        next sign-in).
+//!   Without rights `gaming_fps` returns "no-admin" and retries every few seconds.
+//! - The session only runs while polled (`IDLE`). It would survive a crash otherwise,
+//!   so a leftover session with the same name is stopped on start.
 
 use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
@@ -32,7 +32,7 @@ use windows::Win32::System::Diagnostics::Etw::{
 use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowThreadProcessId};
 
 const SESSION: &str = "NotchFps";
-/// Feste GUID der Sitzung: an ihr hängen die ETW-Rechte, die `fps_unlock` vergibt.
+/// Fixed session GUID; the ETW rights granted by `fps_unlock` are attached to it.
 const SESSION_GUID: GUID = GUID::from_u128(0x6f3e2a41_8c5d_4b7e_9a12_4c4e6f746368);
 const DXGI: GUID = GUID::from_u128(0xca11c036_0102_4a2d_a6ad_f03cfed5d3c9);
 const D3D9: GUID = GUID::from_u128(0x783aca0a_790e_4d7f_8451_aa850511c6b9);
@@ -41,25 +41,25 @@ const DXGKRNL: GUID = GUID::from_u128(0x802ec45a_1e99_4b83_9920_87c98277ba9d);
 const DXGI_PRESENT: [u16; 2] = [42, 55];
 const D3D9_PRESENT: u16 = 1;
 /// DxgKrnl (Keyword "Present"): Blit_Info, PresentHistory_Start, Present_Info,
-/// PresentHistoryDetailed_Start. Alle im Thread des präsentierenden Prozesses geloggt.
+/// PresentHistoryDetailed_Start. All logged on the presenting process's thread.
 const KMT_PRESENT: [u16; 4] = [166, 171, 184, 215];
 const KMT_KEYWORD_PRESENT: u64 = 0x800_0000;
-/// Kein Abruf mehr seit so lange → Sitzung beenden.
+/// Stop the session after this long without a poll.
 const IDLE: Duration = Duration::from_secs(10);
 const TRACE_LEVEL_INFORMATION: u8 = 4;
-/// Fehler ("no-admin", "failed") nach so langer Zeit neu versuchen — z. B. nach der Freigabe.
+/// Retry errors ("no-admin", "failed") after this long, e.g. after unlocking.
 const RETRY: Duration = Duration::from_secs(5);
 
 #[derive(Default)]
 struct Counter {
-    /// Presents je (Prozess, Event-Art) seit dem letzten Abruf.
+    /// Presents per (process, event kind) since the last poll.
     counts: HashMap<(u32, u16), u32>,
     since: Option<Instant>,
     wanted_at: Option<Instant>,
     running: bool,
     error: Option<&'static str>,
     error_at: Option<Instant>,
-    /// Geglättete FPS des zuletzt abgefragten Prozesses.
+    /// Smoothed FPS of the last polled process.
     last: Option<(u32, f64)>,
 }
 
@@ -101,7 +101,7 @@ pub fn gaming_fps() -> Fps {
     c.counts.clear();
     c.since = Some(Instant::now());
     let now = frames / elapsed;
-    // Leicht glätten, damit die Zahl nicht flackert; Prozesswechsel = neu anfangen.
+    // Smooth a little so the number doesn't flicker; a new process starts fresh.
     let fps = match c.last {
         Some((p, prev)) if p == pid && now > 0.0 => prev * 0.4 + now * 0.6,
         _ => now,
@@ -116,14 +116,14 @@ fn foreground_pid() -> u32 {
     pid
 }
 
-/// Puffer für EVENT_TRACE_PROPERTIES + Sitzungsname (muss direkt dahinter liegen).
+/// Buffer for EVENT_TRACE_PROPERTIES + session name (must follow directly).
 struct Props {
     buf: Vec<u8>,
 }
 
 impl Props {
     fn new() -> Self {
-        // Platz für jeden Sitzungsnamen (auch die Probe-Sitzung) — ControlTrace schreibt ihn zurück.
+        // Room for any session name (incl. the probe); ControlTrace writes it back.
         let name_len = 1024 * 2;
         let size = std::mem::size_of::<EVENT_TRACE_PROPERTIES>() + name_len;
         let mut buf = vec![0u8; size];
@@ -176,7 +176,7 @@ fn run() {
         return fail(if status == ERROR_ACCESS_DENIED { "no-admin" } else { "failed" });
     }
 
-    // DxgKrnl ist sehr gesprächig → nur das Present-Keyword. DXGI/D3D9 sind ruhig (0 = alle).
+    // DxgKrnl is very chatty, so only the Present keyword. DXGI/D3D9 are quiet (0 = all).
     for (provider, keyword) in [(DXGI, 0), (D3D9, 0), (DXGKRNL, KMT_KEYWORD_PRESENT)] {
         let status = unsafe { EnableTraceEx2(handle, &provider, EVENT_CONTROL_CODE_ENABLE_PROVIDER.0, TRACE_LEVEL_INFORMATION, keyword, 0, 0, None) };
         if WIN32_ERROR(status.0) != ERROR_SUCCESS {
@@ -196,7 +196,7 @@ fn run() {
         return fail("failed");
     }
 
-    // Wächter: ohne Abruf Sitzung beenden → ProcessTrace kehrt zurück.
+    // Watchdog: stop the session when nobody polls, so ProcessTrace returns.
     let watch_name = name.clone();
     thread::spawn(move || loop {
         thread::sleep(Duration::from_secs(1));
@@ -221,7 +221,7 @@ unsafe extern "system" fn on_event(record: *mut EVENT_RECORD) {
     let Some(r) = (unsafe { record.as_ref() }) else { return };
     let h = &r.EventHeader;
     let id = h.EventDescriptor.Id;
-    // Art = Event-ID, DXGI/D3D9 bekommen eigene Bereiche, damit sie nicht mit DxgKrnl-IDs kollidieren.
+    // Kind = event ID; DXGI/D3D9 get their own ranges so they don't clash with DxgKrnl IDs.
     let kind = if h.ProviderId == DXGI && DXGI_PRESENT.contains(&id) {
         1000 + id
     } else if h.ProviderId == D3D9 && id == D3D9_PRESENT {
@@ -236,12 +236,12 @@ unsafe extern "system" fn on_event(record: *mut EVENT_RECORD) {
     }
 }
 
-/// Einmalig freischalten: startet die App selbst erhöht (`--fps-unlock <SID>`), damit die
-/// UAC-Abfrage "L4-Notchbar" zeigt statt PowerShell. Die SID ermittelt dieser, nicht
-/// erhöhte Prozess: bei einem Standardkonto meldet sich in der UAC-Abfrage ein anderes
-/// (Admin-)Konto an, freigeschaltet werden soll aber dieses hier.
+/// One-time unlock: runs the app itself elevated (`--fps-unlock <SID>`) so the UAC
+/// prompt shows "L4-Notchbar" instead of PowerShell. The SID comes from this
+/// non-elevated process: with a standard account, a different admin account signs in
+/// at the UAC prompt, but this account is the one to unlock.
 ///
-/// Ergebnis: "ok" (FPS laufen sofort), "relogin" (erst nach Ab-/Anmelden), "cancelled", "failed".
+/// Result: "ok" (FPS work now), "relogin" (after signing out), "cancelled", "failed".
 #[tauri::command]
 pub async fn fps_unlock() -> &'static str {
     tauri::async_runtime::spawn_blocking(|| {
@@ -249,7 +249,7 @@ pub async fn fps_unlock() -> &'static str {
         match unlock::run_elevated(&sid) {
             Err(result) => result,
             Ok(0) => {
-                // Fehler vergessen → der nächste Abruf startet die Sitzung neu.
+                // Forget the error so the next poll restarts the session.
                 let mut c = counter().lock().unwrap();
                 c.error = None;
                 drop(c);
@@ -262,7 +262,7 @@ pub async fn fps_unlock() -> &'static str {
     .unwrap_or("failed")
 }
 
-/// Läuft im erhöhten Prozess (siehe main.rs). Rückgabe = Exit-Code: 0 ok, 2 fehlgeschlagen.
+/// Runs in the elevated process (see main.rs). Returns the exit code: 0 ok, 2 failed.
 pub fn elevated_unlock(sid: &str) -> i32 {
     unlock::grant(sid)
 }
@@ -285,7 +285,7 @@ mod unlock {
 
     use super::{stop_session, wide, Props, D3D9, DXGI, DXGKRNL, SESSION_GUID};
 
-    /// Bereits Mitglied der Gruppe (ERROR_MEMBER_IN_ALIAS).
+    /// Already a member of the group (ERROR_MEMBER_IN_ALIAS).
     const MEMBER_IN_ALIAS: u32 = 1378;
 
     pub fn current_user_sid() -> Option<String> {
@@ -307,7 +307,7 @@ mod unlock {
         }
     }
 
-    /// Startet diese exe erhöht mit `--fps-unlock <SID>` und wartet auf ihr Ende.
+    /// Starts this exe elevated with `--fps-unlock <SID>` and waits for it to exit.
     pub fn run_elevated(sid: &str) -> Result<u32, &'static str> {
         let exe = std::env::current_exe().map_err(|_| "failed")?;
         let exe: Vec<u16> = exe.as_os_str().encode_wide().chain(Some(0)).collect();
@@ -336,20 +336,20 @@ mod unlock {
         }
     }
 
-    /// Im erhöhten Prozess: ETW-Rechte + Gruppe vergeben.
+    /// In the elevated process: grant ETW rights and group membership.
     pub fn grant(sid: &str) -> i32 {
         unsafe {
             let mut psid = PSID::default();
             if ConvertStringSidToSidW(PCWSTR(wide(sid).as_ptr()), &mut psid).is_err() {
                 return 2;
             }
-            // 1. Direkte ETW-Rechte: Sitzung anlegen + lesen, Provider einschalten. Sofort wirksam.
+            // 1. ETW rights: create + read the session, enable the providers. Effective immediately.
             let mut ok = EventAccessControl(&SESSION_GUID, EventSecurityAddDACL.0 as u32, psid, TRACELOG_CREATE_REALTIME | TRACELOG_ACCESS_REALTIME, true)
                 == ERROR_SUCCESS.0;
             for provider in [DXGI, D3D9, DXGKRNL] {
                 ok &= EventAccessControl(&provider, EventSecurityAddDACL.0 as u32, psid, TRACELOG_GUID_ENABLE, true) == ERROR_SUCCESS.0;
             }
-            // 2. Gruppe als Rückfallebene (falls Windows die GUID-Rechte nicht prüft).
+            // 2. Group as a fallback (in case Windows doesn't check the GUID rights).
             let grouped = add_to_log_users(psid);
             let _ = LocalFree(Some(HLOCAL(psid.0)));
             if ok || grouped { 0 } else { 2 }
@@ -357,7 +357,7 @@ mod unlock {
     }
 
     unsafe fn add_to_log_users(member: PSID) -> bool {
-        // Gruppenname ist sprachabhängig ("Leistungsprotokollbenutzer") → über die SID auflösen.
+        // The group name is localized, so resolve it from the SID.
         let mut group_sid = PSID::default();
         if unsafe { ConvertStringSidToSidW(w!("S-1-5-32-559"), &mut group_sid) }.is_err() {
             return false;
@@ -378,7 +378,7 @@ mod unlock {
         status == 0 || status == MEMBER_IN_ALIAS
     }
 
-    /// Darf dieser (nicht erhöhte) Prozess jetzt eine Sitzung starten? Kurz anlegen, gleich beenden.
+    /// Can this (non-elevated) process start a session now? Start one briefly and stop it.
     pub fn can_trace() -> bool {
         let name = wide("NotchFpsProbe");
         let mut props = Props::new();

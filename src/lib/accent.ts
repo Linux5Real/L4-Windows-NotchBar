@@ -1,7 +1,7 @@
 /**
- * Leuchtende Akzentfarbe aus einem Cover — wie Apple Music / Dynamic Island.
- * Bild auf 24×24 verkleinern, Pixel nach Sättigung gewichten, dann die Helligkeit
- * so anheben, dass die Farbe auf Schwarz gut lesbar ist.
+ * Bright accent color from a cover, like Apple Music / Dynamic Island.
+ * Shrink the image to 24×24, weight pixels by saturation, then raise the lightness
+ * so the color reads well on black.
  */
 const FALLBACK = "#ffffff";
 const cache = new Map<string, string>();
@@ -29,7 +29,7 @@ export async function accentFrom(src: string | null): Promise<string> {
   let r = 0, g = 0, b = 0, total = 0;
   for (let i = 0; i < data.length; i += 4) {
     const [, s, l] = rgbToHsl(data[i], data[i + 1], data[i + 2]);
-    // Bunte, mittelhelle Pixel zählen viel; Grau, Schwarz und Weiß kaum.
+    // Colorful mid-light pixels count a lot; gray, black and white barely.
     const weight = s * s * (1 - Math.abs(l - 0.5) * 2) + 0.001;
     r += data[i] * weight;
     g += data[i + 1] * weight;
@@ -38,7 +38,7 @@ export async function accentFrom(src: string | null): Promise<string> {
   }
 
   const [h, s, l] = rgbToHsl(r / total, g / total, b / total);
-  // Fast graue Cover → neutral weiß statt schmutziger Farbe.
+  // Almost gray covers → neutral white instead of a muddy color.
   const color = s < 0.12 ? FALLBACK : hsl(h, Math.min(1, s * 1.15 + 0.1), Math.min(0.72, Math.max(0.6, l)));
   cache.set(src, color);
   return color;

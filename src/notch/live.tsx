@@ -8,9 +8,9 @@ import { LiveGaming } from "../features/system/LiveGaming";
 import { useGamingLive } from "../features/system/gaming";
 
 /**
- * Welche Live-Aktivität zeigt die geschlossene Notch? Genau eine, nach Priorität:
- * Gaming-Modus (bewusst eingeschaltet) vor zeitkritisch (Timer, Anruf) vor Hintergrund
- * (Musik). Neue Aktivität = hier einreihen. Die ID ist zugleich das Tool, das sich öffnet.
+ * Which live activity the closed notch shows. Exactly one, by priority:
+ * gaming mode (turned on deliberately) before time-critical (timer, call) before
+ * background (music). Add new activities here. The ID is also the tool that opens.
  */
 export function useLiveActivity(): { id: string | null } {
   const gaming = useGamingLive();

@@ -3,14 +3,14 @@ import { createStore } from "../../lib/store";
 import { display, fetchFps } from "../../platform/services";
 import { settings } from "../../settings/store";
 
-/** Vollbild-App auf dem Monitor der Notch (kommt aus display.rs). */
+/** Fullscreen app on the notch's monitor (from display.rs). */
 const fullscreen = createStore(false);
 
 export function startGamingWatch() {
   display.onFullscreen((on) => fullscreen.set(on));
 }
 
-/** Zeigt die geschlossene Notch gerade FPS und Auslastung? */
+/** Is the closed notch showing FPS and load right now? */
 export function useGamingLive(): boolean {
   const mode = settings.use().gaming.mode;
   const full = fullscreen.use();
@@ -19,7 +19,7 @@ export function useGamingLive(): boolean {
 
 export const fps = createStore<{ value: number | null; error: string | null }>({ value: null, error: null });
 
-/** FPS 1×/s abfragen, solange die Anzeige sichtbar ist. */
+/** Poll FPS once a second while the overlay is visible. */
 export function useFpsPolling() {
   useEffect(() => {
     let alive = true;

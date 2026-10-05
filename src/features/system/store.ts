@@ -2,7 +2,7 @@ import { createStore } from "../../lib/store";
 import { fetchSystem, type SystemStats } from "../../platform/services";
 import { settings } from "../../settings/store";
 
-/** 60 Werte = eine Minute Verlauf bei 1 Abfrage/s. */
+/** 60 values = one minute of history at one poll per second. */
 export const HISTORY = 60;
 
 export type SystemKey = "cpu" | "mem" | "gpu" | "ping";
@@ -10,14 +10,14 @@ export type SystemKey = "cpu" | "mem" | "gpu" | "ping";
 export interface SystemState {
   stats: SystemStats | null;
   history: Record<SystemKey, number[]>;
-  /** Zählt die Abfragen (startet die Gleit-Animation des Verlaufs neu). */
+  /** Counts polls (restarts the history's glide animation). */
   tick: number;
 }
 
 /**
- * Läuft ab App-Start im Hintergrund (nicht erst, wenn das Tool offen ist) — so ist der
- * Verlauf beim Öffnen schon eine Minute lang, und der Gaming-Modus nutzt dieselben Werte.
- * Pausiert nur, wenn weder Hardware-Tool noch Gaming-Modus aktiv sind.
+ * Runs in the background from app start (not only while the tool is open), so the
+ * history is a minute long when opened and gaming mode shares the same values.
+ * Only pauses when neither the Hardware tool nor gaming mode is active.
  */
 export const system = createStore<SystemState>({ stats: null, history: { cpu: [], mem: [], gpu: [], ping: [] }, tick: 0 });
 

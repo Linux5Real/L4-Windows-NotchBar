@@ -1,9 +1,9 @@
-//! Now Playing über GlobalSystemMediaTransportControls (GSMTC).
+//! Now Playing via GlobalSystemMediaTransportControls (GSMTC).
 //!
-//! Deckt alles ab, was Windows im Lautstärke-Overlay zeigt: Spotify, Browser
-//! (YouTube, SoundCloud …), Apple Music, VLC usw. Ein Thread fragt die aktuelle
-//! Sitzung regelmäßig ab und sendet `media://update`, sobald sich etwas ändert.
-//! Polling statt WinRT-Events: robuster beim Wechsel der Sitzung, Kosten vernachlässigbar.
+//! Covers everything Windows shows in its volume flyout: Spotify, browsers
+//! (YouTube, SoundCloud …), Apple Music, VLC and so on. A thread polls the current
+//! session and emits `media://update` when something changes.
+//! Polling instead of WinRT events: more robust when sessions switch, negligible cost.
 
 use std::sync::Mutex;
 use std::thread;
@@ -24,14 +24,14 @@ use windows::Storage::Streams::DataReader;
 pub struct NowPlaying {
     title: String,
     artist: String,
-    /// Cover als Data-URL, `None` wenn die App keins liefert.
+    /// Cover as a data URL, `None` if the app provides none.
     artwork: Option<String>,
     is_playing: bool,
-    /// Sekunden, bereits auf den Abfragezeitpunkt hochgerechnet.
+    /// Seconds, already extrapolated to the time of the query.
     position: f64,
-    /// Sekunden; 0 = unbekannt (z. B. Livestreams).
+    /// Seconds; 0 = unknown (e.g. live streams).
     duration: f64,
-    /// Erlaubt die App Spulen? (Spotify, YouTube: ja; manche Player: nein)
+    /// Does the app allow seeking? (Spotify, YouTube: yes; some players: no)
     can_seek: bool,
     app_id: String,
 }
@@ -44,7 +44,7 @@ pub fn media_get(state: State<'_, MediaState>) -> Option<NowPlaying> {
     state.0.lock().unwrap().clone()
 }
 
-// Async, damit das blockierende `join()` nicht den Haupt-Thread anhält.
+// Async so the blocking `join()` doesn't stall the main thread.
 #[tauri::command]
 pub async fn media_control(action: String, position: Option<f64>) -> Result<(), String> {
     let run = || -> windows::core::Result<()> {
@@ -54,7 +54,7 @@ pub async fn media_control(action: String, position: Option<f64>) -> Result<(), 
             "next" => session.TrySkipNextAsync()?.join()?,
             "previous" => session.TrySkipPreviousAsync()?.join()?,
             "seek" => {
-                // Position relativ zum Start der Timeline, in 100-ns-Ticks.
+                // Position relative to the timeline start, in 100 ns ticks.
                 let start = session.GetTimelineProperties()?.StartTime()?.Duration;
                 let ticks = start + (position.unwrap_or(0.0).max(0.0) * 10_000_000.0) as i64;
                 session.TryChangePlaybackPositionAsync(ticks)?.join()?
@@ -67,7 +67,7 @@ pub async fn media_control(action: String, position: Option<f64>) -> Result<(), 
 }
 
 const POLL: Duration = Duration::from_millis(400);
-/// Abweichung, ab der eine Position als Sprung (Spulen) gilt und neu gesendet wird.
+/// Drift beyond which a position counts as a seek and is sent again.
 const SEEK_THRESHOLD: f64 = 1.5;
 
 pub fn spawn(app: AppHandle) {
@@ -81,7 +81,7 @@ pub fn spawn(app: AppHandle) {
 
         let mut last: Option<NowPlaying> = None;
         let mut last_sent_at = SystemTime::now();
-        // Cover nur neu laden, wenn der Titel wechselt.
+        // Only reload the cover when the title changes.
         let mut artwork_key = String::new();
         let mut artwork: Option<String> = None;
 
@@ -112,7 +112,7 @@ fn read(session: &Session, artwork_key: &mut String, artwork: &mut Option<String
         *artwork_key = key;
         *artwork = props.Thumbnail().ok().and_then(|t| load_thumbnail(&t).ok());
     } else if artwork.is_none() {
-        // Manche Apps liefern das Cover erst kurz nach dem Titel.
+        // Some apps deliver the cover shortly after the title.
         *artwork = props.Thumbnail().ok().and_then(|t| load_thumbnail(&t).ok());
     }
 
@@ -123,7 +123,7 @@ fn read(session: &Session, artwork_key: &mut String, artwork: &mut Option<String
     let duration = ticks_to_secs(timeline.EndTime()?.Duration - timeline.StartTime()?.Duration);
     let mut position = ticks_to_secs(timeline.Position()?.Duration);
 
-    // GSMTC meldet die Position nur sporadisch → auf jetzt hochrechnen.
+    // GSMTC reports the position only sporadically, so extrapolate to now.
     if is_playing {
         let updated = timeline.LastUpdatedTime()?.UniversalTime;
         let elapsed = ticks_to_secs(now_filetime() - updated);
@@ -150,7 +150,7 @@ fn load_thumbnail(reference: &windows::Storage::Streams::IRandomAccessStreamRefe
     Ok(format!("data:{mime};base64,{}", base64::engine::general_purpose::STANDARD.encode(bytes)))
 }
 
-/// Nur senden, wenn sich etwas Sichtbares geändert hat oder gespult wurde.
+/// Only emit when something visible changed or the user seeked.
 fn changed(last: &Option<NowPlaying>, current: &Option<NowPlaying>, last_sent_at: SystemTime) -> bool {
     match (last, current) {
         (None, None) => false,
@@ -169,12 +169,12 @@ fn changed(last: &Option<NowPlaying>, current: &Option<NowPlaying>, last_sent_at
     }
 }
 
-/// WinRT-Zeiten sind 100-ns-Ticks.
+/// WinRT times are 100 ns ticks.
 fn ticks_to_secs(ticks: i64) -> f64 {
     ticks as f64 / 10_000_000.0
 }
 
-/// Jetzt als FILETIME (100-ns-Ticks seit 1601), passend zu `DateTime::UniversalTime`.
+/// Now as FILETIME (100 ns ticks since 1601), matching `DateTime::UniversalTime`.
 fn now_filetime() -> i64 {
     const EPOCH_DIFF_SECS: i64 = 11_644_473_600;
     let since_unix = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default();

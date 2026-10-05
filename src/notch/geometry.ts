@@ -1,11 +1,11 @@
 /*
- * Maße der Notch in jedem Zustand (CSS-px = DIPs, skaliert mit Windows-DPI).
- * Abgeleitet aus NotchDrop (MIT) und den Proportionen der MacBook-Notch.
+ * Notch dimensions per state (CSS px = DIPs, scaled with Windows DPI).
+ * Derived from NotchDrop (MIT) and the MacBook notch proportions.
  *
- *   w    Breite des schwarzen Körpers (ohne Ohren)
- *   h    Höhe
- *   r    Radius der unteren Ecken
- *   ear  Radius der nach außen gewölbten "Ohren" an der Oberkante
+ *   w    width of the black body (without ears)
+ *   h    height
+ *   r    radius of the bottom corners
+ *   ear  radius of the outward-curved "ears" at the top edge
  */
 export interface NotchGeometry {
   w: number;
@@ -14,27 +14,27 @@ export interface NotchGeometry {
   ear: number;
 }
 
-/** Höhe der Kopfzeile im offenen Zustand = Höhe der geschlossenen Notch. */
+/** Header height when open = height of the closed notch. */
 export const HEADER_HEIGHT = 32;
 
-/** Tool-Leiste am unteren Rand der offenen Notch (wie OmniNotch). */
+/** Tool bar at the bottom of the open notch (like OmniNotch). */
 export const DOCK_HEIGHT = 46;
 
-/** Innenabstand im offenen Zustand. Innere Radien = r − PADDING (konzentrisch). */
+/** Padding when open. Inner radii = r − PADDING (concentric). */
 export const PADDING = 16;
 
 export const geometry = {
-  /** Ruhezustand: MacBook-Notch-Proportionen (ca. 185 × 32 pt). */
+  /** Idle: MacBook notch proportions (about 185 × 32 pt). */
   closed: { w: 188, h: 30, r: 10, ear: 6 },
-  /** Hover: minimal größer, als Bestätigung. */
+  /** Hover: slightly larger, as feedback. */
   peek: { w: 204, h: 34, r: 12, ear: 7 },
-  /** Geschlossen, aber mit Live-Aktivität (Musik): seitliche Slots für Cover + Equalizer. */
+  /** Closed with a live activity (music): side slots for cover + equalizer. */
   live: { w: 284, h: 30, r: 10, ear: 6 },
-  /** Gaming-Modus: breitere Slots für FPS/CPU links und GPU/RAM rechts. */
+  /** Gaming mode: wider slots for FPS/CPU on the left and GPU/RAM on the right. */
   gaming: { w: 436, h: 30, r: 10, ear: 6 },
 } satisfies Record<string, NotchGeometry>;
 
-/** Offener Zustand — Größe kommt vom aktiven Tab, Radien sind fix. */
+/** Open state: size comes from the active tab, radii are fixed. */
 export function openGeometry(w: number, h: number): NotchGeometry {
   return { w, h, r: 30, ear: 14 };
 }

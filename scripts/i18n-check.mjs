@@ -1,6 +1,6 @@
-// Prüft die Übersetzung: Jeder t("…")-Text braucht einen Eintrag in src/i18n/en.json,
-// und deutsche Texte außerhalb von t() fallen auf. `npm run i18n` (mit --fix: fehlende
-// Einträge als "TODO" anlegen und alphabetisch sortieren — es wird nichts gelöscht).
+// Checks translations: every t("…") string needs an entry in src/i18n/en.json, and German
+// text outside of t() is flagged. `npm run i18n` (--fix adds missing entries as "TODO"
+// and sorts alphabetically; nothing is deleted).
 import { readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -44,16 +44,16 @@ for (const file of files) {
 const missing = [...used].filter((k) => dict[k] === undefined).sort();
 const unused = Object.keys(dict).filter((k) => !used.has(k)).sort();
 
-console.log(`Fehlend in en.json (${missing.length}):\n  ${missing.join("\n  ")}`);
-console.log(`\nDeutsch ohne t() (${suspicious.length}):\n  ${suspicious.join("\n  ")}`);
-// Meist indirekt genutzt (Listen mit Labels, die erst beim Rendern durch t() gehen).
-if (process.argv.includes("--unused")) console.log(`\nNicht direkt per t() gefunden (${unused.length}):\n  ${unused.join("\n  ")}`);
+console.log(`Missing in en.json (${missing.length}):\n  ${missing.join("\n  ")}`);
+console.log(`\nGerman without t() (${suspicious.length}):\n  ${suspicious.join("\n  ")}`);
+// Usually used indirectly (label lists that only go through t() at render time).
+if (process.argv.includes("--unused")) console.log(`\nNot found via t() directly (${unused.length}):\n  ${unused.join("\n  ")}`);
 
 if (fix) {
   const next = {};
   for (const k of [...Object.keys(dict), ...missing].sort((a, b) => a.localeCompare(b, "de")))
     next[k] = dict[k] ?? "TODO";
   writeFileSync(dictPath, JSON.stringify(next, null, 1) + "\n");
-  console.log("\nen.json aktualisiert.");
+  console.log("\nen.json updated.");
 }
 process.exitCode = missing.length > 0 ? 1 : 0;

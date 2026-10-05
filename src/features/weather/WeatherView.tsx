@@ -8,10 +8,10 @@ import { locale, t } from "../../i18n";
 import { choosePlace, describe, detectPlace, loadForecast, searchPlaces, type Forecast, type Place } from "./store";
 
 /*
- * Wetter über Open-Meteo (Daten und Ortserkennung: ./store.ts).
+ * Weather via Open-Meteo (data and location detection: ./store.ts).
  *
- *   ☀ 22°   Wien · Bedeckt          gefühlt 21° · Wind 7 km/h
- *   Mo  Di  Mi  Do  Fr  Sa  So
+ *   ☀ 22°   Vienna · Cloudy         feels 21° · Wind 7 km/h
+ *   Mo  Tu  We  Th  Fr  Sa  Su
  *   ☁   ☀   🌧  …
  *   18° 21° 15°
  */
@@ -24,7 +24,7 @@ export function WeatherView() {
   const [searching, setSearching] = useState(false);
   const [detectFailed, setDetectFailed] = useState(false);
 
-  // Erster Start ohne Ort: per IP erkennen; klappt das nicht, Suche zeigen.
+  // First start without a location: detect via IP; if that fails, show the search.
   useEffect(() => {
     if (!place) void detectPlace().then((ok) => setDetectFailed(!ok));
   }, [place]);
@@ -102,13 +102,13 @@ function Current({ data, name, auto, onChangePlace }: { data: Forecast; name: st
   );
 }
 
-/** Ortssuche; auch in den Einstellungen genutzt (`compact`). Pfeil = wieder automatisch per IP. */
+/** Location search; also used in the settings (`compact`). Arrow = back to automatic via IP. */
 export function PlaceSearch({ onDone, canCancel, compact = false }: { onDone: () => void; canCancel: boolean; compact?: boolean }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Place[]>([]);
   const [locating, setLocating] = useState(false);
 
-  // Suche mit kurzer Verzögerung, damit nicht jeder Tastendruck eine Anfrage auslöst.
+  // Debounce the search so not every keystroke sends a request.
   useEffect(() => {
     const q = query.trim();
     if (q.length < 2) {

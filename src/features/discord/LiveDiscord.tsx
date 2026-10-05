@@ -6,10 +6,10 @@ import { Equalizer } from "../now-playing/Equalizer";
 import { GuildIcon } from "./DiscordView";
 
 /**
- * Geschlossene Notch im Discord-Anruf (wie ein Telefonat in der Dynamic Island):
- * links das Server-Icon, rechts der gleiche Equalizer wie bei Musik (grün), solange
- * jemand spricht — echte Pegel kommen aus dem Loopback (Stimmen der anderen), bei der
- * eigenen Stimme bewegt er sich synthetisch. Stumm/taub = rotes Symbol.
+ * Closed notch during a Discord call (like a phone call on the Dynamic Island):
+ * server icon on the left, the same equalizer as for music (green) on the right while
+ * someone talks. Real levels come from loopback (the others' voices); for your own
+ * voice it moves synthetically. Muted/deafened = red icon.
  */
 export function LiveDiscord({ call }: { call: DiscordCall }) {
   return (

@@ -1,12 +1,12 @@
-//! Discord-Anruf in der Notch: Server-Icon, Channel, wer spricht; Mikro/Ton stumm, Auflegen.
+//! Discord call in the notch: server icon, channel, who is speaking; mute, deafen, hang up.
 //!
-//! Läuft über das lokale RPC des Discord-Clients (Named Pipe `\\.\pipe\discord-ipc-N`).
-//! Die Sprach-Rechte (`rpc.voice.read/write`) gibt Discord nur einer eigenen Anwendung
-//! aus dem Developer-Portal — daher Client-ID + Client-Secret in den Einstellungen.
-//! Ablauf: Handshake → AUTHORIZE (Discord fragt einmal nach) → Code gegen Token tauschen
-//! → AUTHENTICATE. Der Refresh-Token liegt in der Anmeldeinformationsverwaltung.
+//! Uses the Discord client's local RPC (named pipe `\\.\pipe\discord-ipc-N`).
+//! Discord only grants voice scopes (`rpc.voice.read/write`) to your own application
+//! from the developer portal, hence client ID + client secret in the settings.
+//! Flow: handshake → AUTHORIZE (Discord asks once) → exchange code for token
+//! → AUTHENTICATE. The refresh token is kept in Credential Manager.
 //!
-//! Zustand geht als `discord://state` ans Frontend; Aktionen kommen über `discord_action`.
+//! State goes to the frontend as `discord://state`; actions come in via `discord_action`.
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -25,14 +25,14 @@ use crate::secrets;
 const SCOPES: [&str; 4] = ["rpc", "rpc.voice.read", "rpc.voice.write", "identify"];
 const RETRY: Duration = Duration::from_secs(5);
 const TOKEN_URL: &str = "https://discord.com/api/oauth2/token";
-/// Discords RPC-Autorisierung verbietet eine `redirect_uri` — und verlangt eine, sobald im
-/// Developer-Portal Weiterleitungen eingetragen sind. Deshalb: keine Weiterleitung eintragen.
-/// Beim Token-Tausch wird sie nur als Rückfall versucht (falls doch eine eingetragen ist).
+/// Discord's RPC authorization rejects a `redirect_uri`, yet requires one as soon as the
+/// app has redirects configured in the developer portal. So: don't configure any.
+/// The token exchange only tries it as a fallback in case one is set.
 const REDIRECT: &str = "http://localhost";
 
 #[derive(Default)]
 pub struct DiscordState {
-    /// Erhöht sich bei jedem (Neu-)Start; alte Schleifen beenden sich dann selbst.
+    /// Bumped on every (re)start; old loops then exit on their own.
     generation: AtomicU64,
     actions: Mutex<Option<mpsc::UnboundedSender<String>>>,
     last: Mutex<Option<Snapshot>>,
@@ -93,7 +93,7 @@ pub fn discord_action(action: String, state: State<'_, DiscordState>) {
     }
 }
 
-/// Letzter Stand (für ein neu geladenes Frontend).
+/// Last known state (for a reloaded frontend).
 #[tauri::command]
 pub fn discord_state(state: State<'_, DiscordState>) -> Snapshot {
     state.last.lock().unwrap().clone().unwrap_or(Snapshot { status: "off".into(), ..Default::default() })
@@ -148,7 +148,7 @@ struct Session {
     status: String,
     call: Option<Call>,
     guild_id: Option<String>,
-    /// Wer gerade spricht (User-ID).
+    /// Who is speaking right now (user IDs).
     speaking: HashMap<String, bool>,
     mute: bool,
     deaf: bool,
@@ -213,7 +213,7 @@ impl Session {
         let data = &msg["data"];
         if evt == "ERROR" {
             return match cmd {
-                // Token ungültig → neu anfragen.
+                // Token invalid: ask again.
                 "AUTHENTICATE" => {
                     let _ = secrets::secret_delete("discord.token".into());
                     self.authorize().await
@@ -289,7 +289,7 @@ impl Session {
         Ok(())
     }
 
-    /// Gespeicherten Token erneuern, sonst einmalig in Discord nachfragen.
+    /// Refreshes the stored token, otherwise asks once in Discord.
     async fn login(&mut self) -> Res<()> {
         if let Some(refresh) = secrets::read("discord.token") {
             if let Ok(token) = self.exchange(&[("grant_type", "refresh_token"), ("refresh_token", &refresh)]).await {
@@ -306,7 +306,7 @@ impl Session {
         self.command("AUTHORIZE", json!({ "client_id": client_id, "scopes": SCOPES }), None).await
     }
 
-    /// OAuth-Token holen (Code oder Refresh-Token); speichert den neuen Refresh-Token.
+    /// Fetches an OAuth token (code or refresh token) and stores the new refresh token.
     async fn exchange(&self, grant: &[(&str, &str)]) -> Res<String> {
         let secret = secrets::read("discord.secret").ok_or("Client-Secret fehlt")?;
         let http = reqwest::Client::builder().timeout(Duration::from_secs(10)).build().map_err(|e| e.to_string())?;
@@ -424,7 +424,7 @@ async fn read_frame(reader: &mut ReadHalf<NamedPipeClient>) -> Res<(u32, Value)>
     Ok((op, serde_json::from_slice(&body).unwrap_or_default()))
 }
 
-/// Eintrag aus `voice_states` bzw. VOICE_STATE_*-Event.
+/// Entry from `voice_states` or a VOICE_STATE_* event.
 fn member(v: &Value) -> Member {
     let user = &v["user"];
     let id = user["id"].as_str().unwrap_or_default().to_string();
@@ -438,7 +438,7 @@ fn member(v: &Value) -> Member {
     Member { id, name, avatar, speaking: false, muted }
 }
 
-/// Minimale URL-Kodierung für Formularfelder.
+/// Minimal URL encoding for form fields.
 fn encode(s: &str) -> String {
     s.bytes()
         .map(|b| match b {

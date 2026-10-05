@@ -5,18 +5,18 @@ import type { NotchGeometry } from "./geometry";
 interface Props {
   geometry: NotchGeometry;
   transition: Transition;
-  /** Schatten nur, wenn die Notch über Inhalt "schwebt" (offen). */
+  /** Shadow only when the notch "floats" over content (open). */
   elevated: boolean;
   children?: ReactNode;
 }
 
 /**
- * Die schwarze Form: Körper mit runden unteren Ecken + zwei konkave "Ohren"
- * oben, die die Notch in den Bildschirmrand übergehen lassen.
+ * The black shape: a body with rounded bottom corners + two concave "ears"
+ * at the top that blend the notch into the screen edge.
  *
- * Alle Maße sind Motion-Values und werden direkt per Spring animiert —
- * kein React-Re-Render pro Frame. Animationen sind unterbrechbar und
- * behalten ihre Geschwindigkeit (wichtig beim schnellen Rein/Raus-Hovern).
+ * All dimensions are motion values animated directly by springs, no React
+ * re-render per frame. Animations are interruptible and keep their velocity
+ * (important when hovering in and out quickly).
  */
 export function NotchShape({ geometry, transition, elevated, children }: Props) {
   const w = useMotionValue(geometry.w);
@@ -24,7 +24,7 @@ export function NotchShape({ geometry, transition, elevated, children }: Props) 
   const r = useMotionValue(geometry.r);
   const ear = useMotionValue(geometry.ear);
   const shadow = useMotionValue(elevated ? 1 : 0);
-  const earOffset = useTransform(ear, (e) => -e + 0.5); // 0.5px Überlappung gegen Haarlinien
+  const earOffset = useTransform(ear, (e) => -e + 0.5); // 0.5px overlap against hairlines
 
   const first = useRef(true);
   useEffect(() => {
@@ -81,7 +81,7 @@ export function NotchShape({ geometry, transition, elevated, children }: Props) 
         }}
       />
       <motion.div
-        // clip statt hidden: kein Scroll-Container → Fokus/scrollIntoView können den Inhalt nicht verschieben.
+        // clip instead of hidden: no scroll container, so focus/scrollIntoView can't shift the content.
         className="absolute inset-0 overflow-clip bg-notch"
         style={{ borderBottomLeftRadius: r, borderBottomRightRadius: r }}
       >

@@ -1,12 +1,12 @@
-//! Trading 212 Depot (Public API v0, nur lesend).
+//! Trading 212 portfolio (public API v0, read-only).
 //!
-//! - Auth: HTTP Basic aus API-Key + Secret (Anmeldeinformationsverwaltung). Ohne Secret
-//!   wird der alte Header-Modus (nur Key) versucht.
-//! - Rate-Limits: Summary 1/5 s, Positions 1/1 s → Ergebnis 6 s zwischenspeichern.
-//! - Die API hat keinen Wertverlauf. Deshalb wird pro Tag ein Snapshot gespeichert
-//!   (letzter Stand des Tages) — daraus entsteht "die letzten Tage".
-//! - Zusätzlich Punkte über den heutigen Tag (alle 2 min, solange das Depot offen ist)
-//!   für den "1T"-Verlauf. Gestern wird beim ersten Abruf des Tages verworfen.
+//! - Auth: HTTP Basic from API key + secret (Credential Manager). Without a secret the
+//!   old header mode (key only) is tried.
+//! - Rate limits: summary 1/5 s, positions 1/1 s → cache the result for 6 s.
+//! - The API has no value history, so one snapshot per day is stored
+//!   (the day's last value); that builds "the last days".
+//! - Plus points across today (every 2 min while the portfolio is open)
+//!   for the "1D" chart. Yesterday's are dropped on the first fetch of the day.
 
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -42,11 +42,11 @@ pub struct TradingData {
     intraday: Vec<Point>,
 }
 
-/// Ein Messpunkt im Tagesverlauf.
+/// One data point in the intraday chart.
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Point {
-    /// Unix-ms.
+    /// Unix ms.
     t: u64,
     value: f64,
     pnl: f64,
@@ -66,7 +66,7 @@ pub struct Position {
     quantity: f64,
     average_price: f64,
     current_price: f64,
-    /// Währung der Kurse (z. B. USD); Wert/Kosten/GuV sind in Kontowährung.
+    /// Currency of the prices (e.g. USD); value/cost/P&L are in account currency.
     price_currency: String,
     value: f64,
     cost: f64,
@@ -77,16 +77,16 @@ pub struct Position {
 #[serde(rename_all = "camelCase")]
 pub struct Snapshot {
     date: String,
-    /// Kontowert inkl. Cash.
+    /// Account value including cash.
     value: f64,
     invested: f64,
-    /// Gewinn gesamt (realisiert + unrealisiert). Differenz zum Vortag = Tagesänderung,
-    /// unabhängig von Einzahlungen und Käufen.
+    /// Total profit (realized + unrealized). The change vs. yesterday is the daily change,
+    /// independent of deposits and purchases.
     #[serde(default)]
     pnl: f64,
 }
 
-// --- API-Antworten (nur die genutzten Felder) ---
+// --- API responses (only the fields we use) ---
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -140,8 +140,8 @@ struct ApiWallet {
     unrealized_profit_loss: f64,
 }
 
-/// `env`: "live" oder "demo". `today`: lokales Datum "YYYY-MM-DD" (vom Frontend).
-/// Fehler sind kurze Codes, die das Frontend übersetzt: no-key, unauthorized, forbidden, rate, network:…
+/// `env`: "live" or "demo". `today`: local date "YYYY-MM-DD" (from the frontend).
+/// Errors are short codes the frontend translates: no-key, unauthorized, forbidden, rate, network:…
 #[tauri::command]
 pub async fn trading_fetch(env: String, today: String, app: AppHandle, state: State<'_, TradingState>) -> Result<TradingData, String> {
     if let Some((at, cached_env, data)) = state.cache.lock().unwrap().as_ref() {
@@ -225,15 +225,15 @@ fn history_path(app: &AppHandle, env: &str) -> Option<PathBuf> {
     Some(dir.join(format!("trading-history-{env}.json")))
 }
 
-/// Punkt im Tagesverlauf ergänzen (höchstens alle 2 min, der letzte wird sonst ersetzt).
+/// Adds an intraday point (at most every 2 min, otherwise the last one is replaced).
 fn record_point(app: &AppHandle, env: &str, today: &str, point: Point) -> Vec<Point> {
     let Some(path) = app.path().app_data_dir().ok().map(|d| d.join(format!("trading-intraday-{env}.json"))) else { return vec![point] };
     let mut day: Intraday = std::fs::read(&path).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
     if day.date != today {
         day = Intraday { date: today.to_string(), points: vec![] };
     }
-    // Der letzte Punkt ist immer der aktuelle Stand; ein neuer kommt erst hinzu, wenn der
-    // vorletzte mindestens INTRADAY_STEP_MS zurückliegt.
+    // The last point is always the current value; a new one is only added once the
+    // one before it is at least INTRADAY_STEP_MS old.
     let n = day.points.len();
     if n >= 2 && point.t.saturating_sub(day.points[n - 2].t) < INTRADAY_STEP_MS {
         day.points[n - 1] = point;
@@ -248,7 +248,7 @@ fn now_ms() -> u64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0)
 }
 
-/// Heutigen Stand speichern (überschreibt den Eintrag des Tages) und Verlauf zurückgeben.
+/// Stores today's value (overwrites the day's entry) and returns the history.
 fn record_snapshot(app: &AppHandle, env: &str, snapshot: Snapshot) -> Vec<Snapshot> {
     let Some(path) = history_path(app, env) else { return vec![snapshot] };
     let mut history: Vec<Snapshot> = std::fs::read(&path).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();

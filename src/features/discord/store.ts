@@ -2,12 +2,12 @@ import { createStore } from "../../lib/store";
 import { discord, type DiscordSnapshot } from "../../platform/services";
 import { settings } from "../../settings/store";
 
-/** Letzter Stand aus Rust (`discord://state`). */
+/** Last state from Rust (`discord://state`). */
 export const discordState = createStore<DiscordSnapshot>({ status: "off", error: null, call: null });
 
 let started = false;
 
-/** Verbindung an/aus, sobald das Tool "Discord" bzw. die Client-ID sich ändert. */
+/** Connects/disconnects when the Discord tool or the client ID changes. */
 export function startDiscord() {
   if (started) return;
   started = true;
@@ -27,7 +27,7 @@ export function startDiscord() {
   settings.subscribe(apply);
 }
 
-/** Neu verbinden (z. B. nach dem Speichern des Client-Secrets). */
+/** Reconnect (e.g. after saving the client secret). */
 export function reconnectDiscord() {
   const s = settings.get();
   discord.configure(s.tools.some((x) => x.id === "discord" && x.enabled), s.discord.clientId);

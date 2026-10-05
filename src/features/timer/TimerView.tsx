@@ -18,11 +18,11 @@ import { t } from "../../i18n";
 const modeLabel: Record<TimerMode, string> = { focus: "Fokus", break: "Pause" };
 
 /*
- *   [Fokus | Pause]               15  25  45  [37]  [✎]
+ *   [Focus | Break]               15  25  45  [37]  [✎]
  *   24:59  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  [↺] [⏯]
  *
- * Eigene Zeit: ✎ öffnet ein Minutenfeld, oder Mausrad über der großen Zeit
- * (±1 min, Shift ±5) — nur solange der Timer nicht läuft.
+ * Custom time: ✎ opens a minutes field, or scroll over the big time
+ * (±1 min, Shift ±5), only while the timer isn't running.
  */
 export function TimerView() {
   const s = timer.use();
@@ -31,10 +31,10 @@ export function TimerView() {
 }
 
 /*
- *   ✓ Fokus abgelaufen
- *   0:00  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  [🔕] bzw. [✕]
+ *   ✓ Focus finished
+ *   0:00  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  [🔕] or [✕]
  *
- * Bleibt stehen, bis man schließt. Solange es klingelt: Alarm stoppen; danach nur noch ✕.
+ * Stays until dismissed. While ringing: stop the alarm; after that only ✕.
  */
 function FinishedView() {
   const s = timer.use();
@@ -100,7 +100,7 @@ function SetupView() {
   const [editing, setEditing] = useState(false);
   const clockRef = useRef<HTMLSpanElement>(null);
 
-  // Mausrad stellt die Minuten ein. Nur wenn nicht gestartet; passive:false für preventDefault.
+  // The wheel sets the minutes. Only when not started; passive:false for preventDefault.
   const editable = !running && remaining === s.duration;
   useEffect(() => {
     const el = clockRef.current;
@@ -127,7 +127,7 @@ function SetupView() {
             timerActions.select(m, s.custom?.[m] ?? presets[m][m === "focus" ? 1 : 0]);
           }}
         />
-        {/* Chips und Minutenfeld liegen rechtsbündig übereinander: beim Wechsel springt nichts zur Seite. */}
+        {/* Chips and minutes field are stacked right-aligned, so nothing jumps sideways on switch. */}
         <div className="relative flex h-6 flex-1 justify-end">
         <AnimatePresence initial={false}>
           {editing ? (
@@ -219,7 +219,7 @@ function SetupView() {
   );
 }
 
-/** Minutenfeld: Enter/✓ übernimmt, Esc oder Fokusverlust bricht ab. */
+/** Minutes field: Enter/✓ applies, Esc or blur cancels. */
 function MinutesInput(props: { initial: number; tint: string; onDone: (minutes: number | null) => void }) {
   const [value, setValue] = useState(String(props.initial));
   const ref = useRef<HTMLInputElement>(null);
@@ -250,7 +250,7 @@ function MinutesInput(props: { initial: number; tint: string; onDone: (minutes: 
           maxLength={3}
           onChange={(e) => setValue(e.target.value.replace(/\D/g, ""))}
           onKeyDown={(e) => {
-            // Esc nur hier abfangen, nicht die ganze Notch schließen.
+            // Only catch Esc here, don't close the whole notch.
             if (e.key === "Escape") {
               e.stopPropagation();
               props.onDone(null);

@@ -7,7 +7,7 @@ import type { MediaSource } from "./types";
 export type { NowPlaying } from "./types";
 export { livePosition } from "./types";
 
-// In der App: Windows-Medien (GSMTC). Im Browser: Beispieldaten zum Gestalten.
+// In the app: Windows media (GSMTC). In the browser: sample data for design work.
 export const media: MediaSource = isNative ? createNativeMedia() : createMockMedia();
 
 export function useNowPlaying() {

@@ -5,8 +5,8 @@ import type { NowPlaying } from "../../platform/media";
 import { Equalizer } from "./Equalizer";
 
 /**
- * Geschlossene Notch während Musik läuft: Cover links, Equalizer rechts —
- * die Mitte bleibt leer, wie bei einer echten Notch.
+ * Closed notch while music plays: cover on the left, equalizer on the right,
+ * the middle stays empty like a real notch.
  */
 export function LiveActivity({ np }: { np: NowPlaying }) {
   return (
@@ -23,8 +23,8 @@ export function LiveActivity({ np }: { np: NowPlaying }) {
 }
 
 /**
- * Songwechsel: altes und neues Cover liegen übereinander und blenden mit Blur-Brücke
- * ineinander (wie die Dynamic Island) — kein hartes Ersetzen, keine Lücke.
+ * Track change: old and new cover sit on top of each other and blend with a blur bridge
+ * (like the Dynamic Island), no hard swap, no gap.
  */
 function LiveArtwork({ artwork }: { artwork: string | null }) {
   return (

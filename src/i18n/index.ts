@@ -2,13 +2,13 @@ import { settings } from "../settings/store";
 import { en } from "./en";
 
 /*
- * Übersetzung: Der deutsche Text steht direkt im Code und ist zugleich der Schlüssel,
- * `en.ts` liefert die englische Fassung. Fehlt ein Eintrag, bleibt es deutsch.
- * Platzhalter: t("vor {n} Min.", { n: 5 }).
+ * Translation: the German text lives directly in the code and doubles as the key;
+ * `en.ts` provides the English version. Missing entries stay German.
+ * Placeholders: t("vor {n} Min.", { n: 5 }).
  *
- * Kein Hook nötig: Die Notch abonniert die Einstellungen und rendert beim Sprachwechsel
- * den ganzen Baum neu. Konstanten auf Modulebene (Listen mit Labels) erst beim Rendern
- * durch t() schicken, sonst bleiben sie in der Startsprache.
+ * No hook needed: the notch subscribes to the settings and re-renders the whole tree
+ * when the language changes. Send module-level constants (label lists) through t()
+ * only at render time, otherwise they stay in the startup language.
  */
 export type Language = "de" | "en";
 
@@ -22,12 +22,12 @@ export function t(de: string, vars?: Record<string, string | number>): string {
   return s;
 }
 
-/** Locale für Intl (Zahlen, Datum, Wochentage). */
+/** Locale for Intl (numbers, dates, weekdays). */
 export function locale(): string {
   return lang() === "en" ? "en-GB" : "de-DE";
 }
 
-/** Fehlertexte aus Rust (AI-Chat, Converter) kommen deutsch → hier per Muster übersetzen. */
+/** Error texts from Rust (AI chat, converter) arrive in German; translate them by pattern. */
 const backendPatterns: [RegExp, string][] = [
   [/^Kein Modell eingetragen$/, "No model set"],
   [/^Base-URL muss mit https:\/\/ beginnen$/, "Base URL must start with https://"],

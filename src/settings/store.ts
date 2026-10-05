@@ -7,40 +7,40 @@ export type AskEffort = "low" | "medium" | "high" | "xhigh";
 export interface AskProviderConfig {
   model: string;
   effort: AskEffort;
-  /** Nur für "custom": OpenAI-kompatible Basis, z. B. https://…/v1 */
+  /** Only for "custom": OpenAI-compatible base, e.g. https://…/v1 */
   baseUrl: string;
 }
 
 export interface Settings {
-  /** Öffnen bei Hover oder erst bei Klick. */
+  /** Open on hover or only on click. */
   openMode: "hover" | "click";
   hoverDelay: "fast" | "normal" | "patient";
-  /** Reihenfolge = Reihenfolge in der Kopfzeile. */
+  /** Order = order in the tool bar. */
   tools: { id: string; enabled: boolean }[];
   trading: { env: "live" | "demo" };
-  /** AI-Nutzung: welche Anbieter angezeigt werden (Reihenfolge = Anzeige). */
+  /** AI usage: which providers are shown (order = display order). */
   usage: { claude: boolean; codex: boolean; gemini: boolean; cursor: boolean };
   ask: { provider: AskProvider; configs: Record<AskProvider, AskProviderConfig> };
-  /** `auto` = per IP erkannt (bei jedem Start neu); selbst gewählt bleibt fest. */
+  /** `auto` = detected via IP (again on every start); a picked location stays. */
   weather: { name: string; lat: number; lon: number; auto?: boolean } | null;
   /**
-   * Darstellung: immer oben oder bei Vollbild ausblenden; Monitor-Name (null = Hauptmonitor);
-   * `offset` = seitliche Verschiebung in CSS-px aus der Mitte (per Ziehen gesetzt).
+   * Display: always on top or hidden in fullscreen; monitor name (null = primary);
+   * `offset` = horizontal offset from the center in CSS px (set by dragging).
    */
   display: { visibility: "always" | "hide-fullscreen"; monitor: string | null; offset: number };
-  /** Gaming-Modus: FPS + Auslastung in der geschlossenen Notch — aus, nur bei Vollbild oder immer. */
+  /** Gaming mode: FPS + load in the closed notch: off, only in fullscreen, or always. */
   gaming: { mode: "off" | "fullscreen" | "on" };
-  /** Punkte wie beim iPhone: Mikrofon/Kamera (grün) bzw. Bildschirmaufnahme (rot) in Benutzung. */
+  /** Dots like on iPhone: mic/camera (green) or screen recording (red) in use. */
   privacyDots: boolean;
-  /** Discord-Anruf in der Notch (lokales RPC, an = Tool "discord" aktiv). Client-Secret liegt in den Geheimnissen. */
+  /** Discord call in the notch (local RPC, on = Discord tool enabled). The client secret is stored with the secrets. */
   discord: { clientId: string };
   alarm: { sound: AlarmSound; volume: number; duration: AlarmDuration };
   language: "de" | "en";
-  /** Einmal täglich anonym nach einer neuen Version suchen (installiert wird nur auf Klick). */
+  /** Check for a new version once a day, anonymously (installs only on click). */
   updates: { auto: boolean };
 }
 
-/** Alle Tool-IDs in Standardreihenfolge. Muss zu `src/notch/tabs.ts` passen. */
+/** All tool IDs in default order. Must match `src/notch/tabs.ts`. */
 export const TOOL_IDS = [
   "overview",
   "media",
@@ -89,13 +89,13 @@ export const hoverDelayMs: Record<Settings["hoverDelay"], number> = { fast: 90, 
 
 export const settings = createStore<Settings>(defaults, { persist: "settings" });
 
-// Gespeicherte Einstellungen älterer Versionen ergänzen: neue Felder + neue Tools hinten anhängen.
+// Fill in settings from older versions: new fields + append new tools.
 settings.set((s) => {
   const known = new Set<string>(TOOL_IDS);
   const tools = (s.tools ?? []).filter((t) => known.has(t.id));
   for (const id of TOOL_IDS) {
     if (tools.some((t) => t.id === id)) continue;
-    // Die Übersicht ist die Startseite → bei bestehenden Installationen vorne einreihen.
+    // Overview is the start page, so put it first for existing installs.
     if (id === "overview") tools.unshift({ id, enabled: true });
     else tools.push({ id, enabled: !DEFAULT_OFF.has(id) });
   }
@@ -114,7 +114,7 @@ settings.set((s) => {
   };
 });
 
-/** Ältere Form ({ provider: "demo", model }) und fehlende Anbieter ergänzen. */
+/** Migrates the old shape ({ provider: "demo", model }) and adds missing providers. */
 function migrateAsk(old: Partial<Settings["ask"]> | undefined): Settings["ask"] {
   const known = Object.keys(defaults.ask.configs) as AskProvider[];
   const provider = old?.provider && known.includes(old.provider) ? old.provider : defaults.ask.provider;

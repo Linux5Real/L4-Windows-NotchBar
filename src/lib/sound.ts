@@ -1,9 +1,9 @@
 /*
- * Alarm-Töne per WebAudio — keine Audiodateien nötig. Klassische Wecker-Muster:
- * jedes Muster ist eine kurze Phrase, die bis zur gewählten Dauer wiederholt wird.
+ * Alarm sounds via WebAudio, no audio files needed. Classic alarm patterns:
+ * each pattern is a short phrase repeated up to the chosen duration.
  */
 export type AlarmSound = "chime" | "bell" | "digital" | "radar" | "marimba" | "soft";
-/** Sekunden; 0 = einmal, -1 = bis zum Stoppen (max. 2 Minuten). */
+/** Seconds; 0 = once, -1 = until stopped (max. 2 minutes). */
 export type AlarmDuration = 0 | 5 | 15 | 30 | -1;
 
 export const alarmSounds: { value: AlarmSound; label: string }[] = [
@@ -18,15 +18,15 @@ export const alarmSounds: { value: AlarmSound; label: string }[] = [
 interface Note {
   freq: number;
   at: number;
-  /** Abklingzeit in s. */
+  /** Decay time in s. */
   decay: number;
   type?: OscillatorType;
-  /** Obertöne (Vielfache + relative Lautstärke) für Glocken-Klang. */
+  /** Overtones (multiples + relative volume) for a bell sound. */
   partials?: [number, number][];
   gain?: number;
 }
 
-/** Eine Phrase pro Ton; `length` = Abstand bis zur Wiederholung. */
+/** One phrase per sound; `length` = gap until it repeats. */
 const patterns: Record<AlarmSound, { notes: Note[]; length: number }> = {
   chime: {
     notes: [
@@ -69,7 +69,7 @@ const MAX_RING_S = 120;
 let ctx: AudioContext | null = null;
 let stopCurrent: (() => void) | null = null;
 
-/** Spielt den Alarm; gibt eine Stopp-Funktion zurück. Ein neuer Alarm stoppt den alten. */
+/** Plays the alarm and returns a stop function. A new alarm stops the old one. */
 export function playAlarm(sound: AlarmSound, volume: number, duration: AlarmDuration): () => void {
   stopCurrent?.();
   ctx ??= new AudioContext();
@@ -106,7 +106,7 @@ export function playAlarm(sound: AlarmSound, volume: number, duration: AlarmDura
   }
 
   const stop = () => {
-    // Weich ausblenden statt hart abschneiden.
+    // Fade out softly instead of cutting off.
     master.gain.cancelScheduledValues(c.currentTime);
     master.gain.setTargetAtTime(0, c.currentTime, 0.05);
     window.setTimeout(() => {
@@ -114,7 +114,7 @@ export function playAlarm(sound: AlarmSound, volume: number, duration: AlarmDura
         try {
           o.stop();
         } catch {
-          // Schon beendet.
+          // Already stopped.
         }
       });
       master.disconnect();
@@ -126,7 +126,7 @@ export function playAlarm(sound: AlarmSound, volume: number, duration: AlarmDura
   return stop;
 }
 
-/** Läuft gerade ein Alarm? */
+/** Is an alarm playing right now? */
 export function alarmRinging(): boolean {
   return stopCurrent !== null;
 }

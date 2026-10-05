@@ -6,12 +6,12 @@ import { isNative } from "../native";
 export interface ClipItem {
   id: number;
   kind: "text" | "link" | "image" | "files";
-  /** Text, Link, "1920 × 1080" bei Bildern, Dateinamen (zeilengetrennt) bei Dateien. */
+  /** Text, link, "1920 × 1080" for images, file names (one per line) for files. */
   text: string;
   thumbnail: string | null;
-  /** Dateien: wie viele der Einträge Ordner sind. */
+  /** Files: how many entries are folders. */
   folders: number;
-  /** Unix-Zeit in ms. */
+  /** Unix time in ms. */
   copiedAt: number;
 }
 
@@ -23,7 +23,7 @@ export interface ClipPreview {
 
 interface ClipboardSource {
   get(): ClipItem[];
-  /** Große Bildvorschau (Bilder und kopierte Bilddateien). */
+  /** Large image preview (images and copied image files). */
   preview(id: number): Promise<ClipPreview | null>;
   subscribe(listener: () => void): () => void;
   copy(id: number): Promise<void>;
@@ -54,7 +54,7 @@ function createNative(): ClipboardSource {
   };
 }
 
-// Beispieldaten für den Browser-Prototyp.
+// Sample data for the browser prototype.
 function createMock(): ClipboardSource {
   const now = Date.now();
   let items: ClipItem[] = [
@@ -92,7 +92,7 @@ function createMock(): ClipboardSource {
   };
 }
 
-/** Browser-Prototyp: generiertes Bild im gewünschten Seitenverhältnis. */
+/** Browser prototype: generated image in the requested aspect ratio. */
 function demoImage(w: number, h: number): string {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}">
     <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff9a5a"/><stop offset="0.5" stop-color="#c2417a"/><stop offset="1" stop-color="#2a1b5e"/></linearGradient></defs>

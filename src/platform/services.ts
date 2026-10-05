@@ -3,11 +3,11 @@ import { listen } from "@tauri-apps/api/event";
 import { isNative } from "./native";
 
 /*
- * Brücken zu den Rust-Diensten (src-tauri/src/*.rs). Im Browser liefern sie
- * Beispieldaten, damit sich jedes Tool ohne App gestalten lässt.
+ * Bridges to the Rust services (src-tauri/src/*.rs). In the browser they return
+ * sample data so every tool can be designed without the app.
  */
 
-// ---------- Geheimnisse (Anmeldeinformationsverwaltung) ----------
+// ---------- Secrets (Credential Manager) ----------
 
 export type SecretName = "t212.key" | "t212.secret" | "ai.anthropic" | "ai.openai" | "ai.openrouter" | "ai.custom" | "discord.secret";
 
@@ -40,10 +40,10 @@ export interface Position {
 
 export interface Snapshot {
   date: string;
-  /** Kontowert inkl. Cash. */
+  /** Account value including cash. */
   value: number;
   invested: number;
-  /** Gewinn gesamt; Differenz zum Vortag = Tagesänderung (ohne Einzahlungen/Käufe). */
+  /** Total profit; change vs. yesterday = daily change (excluding deposits/purchases). */
   pnl: number;
 }
 
@@ -57,11 +57,11 @@ export interface TradingData {
   realized: number;
   positions: Position[];
   history: Snapshot[];
-  /** Messpunkte des heutigen Tages (alle ~2 min, solange das Depot offen war). */
+  /** Today's data points (every ~2 min while the portfolio was open). */
   intraday: { t: number; value: number; pnl: number }[];
 }
 
-/** Fehlercodes aus Rust: no-key, unauthorized, forbidden, rate, network:… */
+/** Error codes from Rust: no-key, unauthorized, forbidden, rate, network:… */
 export function fetchTrading(env: "live" | "demo"): Promise<TradingData> {
   const today = localDate(new Date());
   return isNative ? invoke<TradingData>("trading_fetch", { env, today }) : mockTrading();
@@ -94,7 +94,7 @@ async function mockTrading(): Promise<TradingData> {
     pnl = i === 0 ? pnlNow : pnl + Math.sin(i * 1.7) * 55 + 18;
     history.push({ date: localDate(d), value: invested + cash + pnl - realized, invested, pnl });
   }
-  // Tagesverlauf ab 9:00 alle 2 min, endet beim aktuellen Stand.
+  // Intraday from 9:00 every 2 min, ending at the current value.
   const start = new Date();
   start.setHours(9, 0, 0, 0);
   const steps = Math.max(2, Math.floor((Date.now() - start.getTime()) / 120_000));
@@ -107,7 +107,7 @@ async function mockTrading(): Promise<TradingData> {
   return { currency: "EUR", totalValue: currentValue + cash, cash, invested, currentValue, unrealized: currentValue - invested, realized, positions, history, intraday };
 }
 
-// ---------- AI-Nutzung ----------
+// ---------- AI usage ----------
 
 export type UsageId = "claude" | "codex" | "gemini" | "cursor";
 
@@ -116,7 +116,7 @@ export interface UsageWindow {
   kind: string;
   usedPercent: number;
   resetsAt: number | null;
-  /** Länge des Fensters in Sekunden (für die "im Plan"-Markierung). */
+  /** Window length in seconds (for the "on track" marker). */
   windowSecs: number | null;
 }
 
@@ -124,7 +124,7 @@ export interface UsageProvider {
   id: UsageId;
   plan: string | null;
   windows: UsageWindow[];
-  /** not-found | not-signed-in | expired | rate-limited | offline | failed (bei Daten: veraltet). */
+  /** not-found | not-signed-in | expired | rate-limited | offline | failed (with data: stale). */
   error: string | null;
   updatedAt: number;
 }
@@ -169,12 +169,12 @@ export interface SystemStats {
   cpuName: string;
   memUsed: number;
   memTotal: number;
-  /** null = keine GPU-Indikatoren. */
+  /** null = no GPU counters. */
   gpu: number | null;
   gpuName: string | null;
   gpuMemUsed: number;
   gpuMemTotal: number;
-  /** ms; null = keine Antwort. */
+  /** ms; null = no reply. */
   ping: number | null;
 }
 
@@ -217,7 +217,7 @@ export interface ConvertResult {
 
 export function probeFiles(paths: string[]): Promise<{ files: DroppedFile[]; ffmpeg: boolean }> {
   if (isNative) return invoke("convert_probe", { paths });
-  // Browser: Pfade sind erfundene Namen aus dem Drop-Event.
+  // Browser: paths are made-up names from the drop event.
   const files = paths.map((p) => {
     const name = p.split(/[\\/]/).pop() ?? p;
     const ext = name.includes(".") ? name.split(".").pop()!.toLowerCase() : "";
@@ -262,7 +262,7 @@ export function openFile(path: string): Promise<void> {
   return isNative ? invoke("open_path", { path }) : Promise.resolve();
 }
 
-/** Dateien in die Zwischenablage (Strg+V im Explorer fügt sie ein). */
+/** Puts files on the clipboard (Ctrl+V in Explorer pastes them). */
 export function copyFiles(paths: string[]): Promise<void> {
   return isNative ? invoke("copy_files", { paths }) : Promise.resolve();
 }
@@ -273,13 +273,13 @@ export function filePreview(path: string): Promise<string | null> {
 
 // ---------- Updates ----------
 
-/** Gefundenes Update: Version + Installieren (lädt, installiert, startet neu). */
+/** A found update: version + install (downloads, installs, restarts). */
 export interface UpdateHandle {
   version: string;
   install: (onProgress: (fraction: number) => void) => Promise<void>;
 }
 
-/** Im Browser: mit `?update` in der URL gibt es zum Testen ein Schein-Update. */
+/** In the browser, `?update` in the URL fakes an update for testing. */
 const mockUpdate: UpdateHandle = {
   version: "0.2.0",
   install: async (onProgress) => {
@@ -296,7 +296,7 @@ export const updater = {
     const { getVersion } = await import("@tauri-apps/api/app");
     return getVersion();
   },
-  /** Fragt die signierte latest.json im neuesten GitHub-Release ab. null = aktuell. */
+  /** Fetches the signed latest.json from the newest GitHub release. null = up to date. */
   check: async (): Promise<UpdateHandle | null> => {
     if (!isNative) return new URLSearchParams(location.search).has("update") ? mockUpdate : null;
     const { check } = await import("@tauri-apps/plugin-updater");
@@ -311,7 +311,7 @@ export const updater = {
           if (e.event === "Started") total = e.data.contentLength ?? 0;
           else if (e.event === "Progress" && total) onProgress(Math.min(1, (done += e.data.chunkLength) / total));
         });
-        // Windows beendet die App beim Installieren selbst; sonst hier neu starten.
+        // Windows quits the app itself while installing; otherwise restart here.
         const { relaunch } = await import("@tauri-apps/plugin-process");
         await relaunch();
       },
@@ -326,7 +326,7 @@ export const autostart = {
   set: (enabled: boolean): Promise<void> => (isNative ? invoke("autostart_set", { enabled }) : Promise.resolve()),
 };
 
-// ---------- Darstellung ----------
+// ---------- Display ----------
 
 export interface MonitorInfo {
   name: string;
@@ -346,7 +346,7 @@ export const display = {
   apply: (config: { hideFullscreen: boolean; monitor: string | null; offset: number; gaming: boolean }) => {
     if (isNative) void invoke("display_apply", { config });
   },
-  /** true, solange eine App den Monitor der Notch im Vollbild abdeckt. */
+  /** true while an app covers the notch's monitor in fullscreen. */
   onFullscreen: (handler: (on: boolean) => void): (() => void) => {
     if (!isNative) return () => {};
     const off = listen<boolean>("notch://fullscreen", (e) => handler(e.payload));
@@ -354,10 +354,10 @@ export const display = {
   },
 };
 
-// ---------- Gaming-Modus ----------
+// ---------- Gaming mode ----------
 
-/** FPS des Vordergrundprozesses (ETW). error: no-admin | failed. */
-/** Einmalig ohne Admin freischalten (Gruppe "Leistungsprotokollbenutzer", eine UAC-Abfrage). */
+/** FPS of the foreground process (ETW). error: no-admin | failed. */
+/** One-time unlock so FPS work without running as admin (one UAC prompt). */
 export function unlockFps(): Promise<"ok" | "relogin" | "cancelled" | "failed"> {
   if (isNative) return invoke("fps_unlock");
   return new Promise((r) => setTimeout(() => r("relogin"), 600));
@@ -368,7 +368,7 @@ export function fetchFps(): Promise<{ fps: number | null; error: string | null }
   return Promise.resolve({ fps: 138 + Math.round((Math.random() - 0.5) * 14), error: null });
 }
 
-// ---------- Datenschutz-Punkte ----------
+// ---------- Privacy dots ----------
 
 export interface PrivacyState {
   mic: boolean;
@@ -376,7 +376,7 @@ export interface PrivacyState {
   screen: boolean;
 }
 
-/** Im Browser über das Dev-Panel umschaltbar. */
+/** Toggled from the dev panel in the browser. */
 export const mockPrivacy: PrivacyState = { mic: false, camera: false, screen: false };
 
 export function fetchPrivacy(): Promise<PrivacyState> {
@@ -400,7 +400,7 @@ export interface DiscordCall {
   guildIcon: string | null;
   mute: boolean;
   deaf: boolean;
-  /** Man selbst spricht gerade. */
+  /** You are speaking right now. */
   speaking: boolean;
   members: DiscordMember[];
 }
@@ -430,7 +430,7 @@ export const discord = {
   },
 };
 
-/** Browser: ein Beispiel-Anruf, über das Dev-Panel start-/beendbar. */
+/** Browser: a sample call, started/ended from the dev panel. */
 export const mockDiscord = (() => {
   const avatar = (n: number) => `https://cdn.discordapp.com/embed/avatars/${n}.png`;
   let state: DiscordSnapshot = { status: "ready", error: null, call: null };
@@ -465,7 +465,7 @@ export const mockDiscord = (() => {
           { id: "4", name: "Lea", avatar: avatar(3), speaking: false, muted: false },
         ],
       });
-      // Abwechselnd sprechen, damit man die Ringe sieht.
+      // Take turns speaking so the rings are visible.
       let i = 0;
       talk = setInterval(() => {
         if (!state.call) return;
@@ -484,7 +484,7 @@ export const mockDiscord = (() => {
   };
 })();
 
-// ---------- Übersicht: Lautstärke + Windows-Fokus ----------
+// ---------- Overview: volume + Windows focus ----------
 
 export interface VolumeState {
   /** 0..1 */
@@ -494,7 +494,7 @@ export interface VolumeState {
 
 export interface FocusState {
   active: boolean;
-  /** "focus" = Fokussitzung (Windows 11), "dnd" = nur "Nicht stören" */
+  /** "focus" = focus session (Windows 11), "dnd" = only Do Not Disturb */
   kind: "focus" | "dnd";
 }
 

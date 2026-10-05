@@ -1,13 +1,13 @@
-//! Punkte wie beim iPhone: Wer benutzt gerade Mikrofon, Kamera oder nimmt den Bildschirm auf?
+//! Dots like on iPhone: is anything using the mic or camera, or recording the screen?
 //!
-//! Windows führt das selbst (Einstellungen → Datenschutz → "Zuletzt verwendet") unter
-//! `HKCU\…\CapabilityAccessManager\ConsentStore\<Fähigkeit>`: je App ein Schlüssel mit
-//! `LastUsedTimeStart`/`LastUsedTimeStop`. Stop = 0 heißt "läuft gerade". Desktop-Apps
-//! liegen eine Ebene tiefer unter `NonPackaged`.
+//! Windows tracks this itself (Settings → Privacy → "Recent activity") under
+//! `HKCU\…\CapabilityAccessManager\ConsentStore\<capability>`: one key per app with
+//! `LastUsedTimeStart`/`LastUsedTimeStop`. Stop = 0 means "in use". Desktop apps
+//! sit one level deeper under `NonPackaged`.
 //!
-//! Bildschirmaufnahme: `graphicsCaptureProgrammatic` (Windows.Graphics.Capture — Discord,
-//! Teams, Snipping Tool, OBS je nach Quelle). Ältere Aufnahme-Wege (DXGI-Duplizierung)
-//! tauchen dort nicht auf.
+//! Screen recording: `graphicsCaptureProgrammatic` (Windows.Graphics.Capture: Discord,
+//! Teams, Snipping Tool, OBS depending on source). Older capture paths (DXGI
+//! duplication) don't show up there.
 
 use serde::Serialize;
 use windows::core::{HSTRING, PCWSTR};
@@ -30,14 +30,14 @@ pub fn privacy_state() -> Privacy {
     Privacy { mic: busy("microphone"), camera: busy("webcam"), screen: busy("graphicsCaptureProgrammatic") }
 }
 
-/// Irgendeine App unter `path` (oder `path\NonPackaged`) gerade aktiv?
+/// Is any app under `path` (or `path\NonPackaged`) active right now?
 fn in_use(path: &str, own: Option<&str>) -> bool {
     let Some(key) = open(HKEY_CURRENT_USER, path) else { return false };
     let mut active = false;
     for name in subkeys(key) {
         let Some(sub) = open(key, &name) else { continue };
         if name == "NonPackaged" {
-            // Eigene Exe nie zählen (Equalizer nutzt Loopback, nicht das Mikrofon — sicher ist sicher).
+            // Never count our own exe (the equalizer uses loopback, not the mic, but just in case).
             active |= subkeys(sub).iter().filter(|n| Some(n.to_lowercase().as_str()) != own).any(|n| open(sub, n).is_some_and(|k| running_close(k)));
         } else {
             active |= running(sub);
@@ -51,7 +51,7 @@ fn in_use(path: &str, own: Option<&str>) -> bool {
     active
 }
 
-/// Start gesetzt, Stop = 0 → läuft.
+/// Start set and Stop = 0 → in use.
 fn running(key: HKEY) -> bool {
     let start = qword(key, "LastUsedTimeStart");
     let stop = qword(key, "LastUsedTimeStop");

@@ -5,9 +5,9 @@ import { content } from "../design/motion";
 import { createStore } from "../lib/store";
 
 /*
- * Aktionen eines Tools rechts in der Kopfzeile (neben der Pinnadel), z. B. "Leeren"
- * oder "Aktualisieren". Das Tool rendert <HeaderActions> irgendwo in seiner View;
- * der Inhalt landet per Portal in der Kopfzeile und blendet mit dem Tool ein und aus.
+ * A tool's actions on the right of the header (next to the pin), e.g. "Clear"
+ * or "Refresh". The tool renders <HeaderActions> anywhere in its view; the
+ * content is portaled into the header and fades in and out with the tool.
  */
 export const headerSlot = createStore<HTMLElement | null>(null);
 
@@ -27,7 +27,7 @@ export function HeaderActions({ children }: { children: ReactNode }) {
   );
 }
 
-/** Runder Icon-Knopf für die Kopfzeile — gleiche Größe wie die Pinnadel. */
+/** Round icon button for the header, same size as the pin. */
 export function HeaderButton(props: { label: string; onClick: () => void; active?: boolean; disabled?: boolean; children: ReactNode }) {
   return (
     <button

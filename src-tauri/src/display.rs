@@ -1,13 +1,13 @@
-//! Darstellung: auf welchem Monitor die Notch sitzt und ob sie bei Vollbild verschwindet.
+//! Display: which monitor the notch sits on and whether it hides during fullscreen.
 //!
-//! Ein Thread prüft alle 400 ms das Vordergrundfenster. Deckt es den ganzen Monitor der
-//! Notch ab (Spiel, Video, Präsentation — auch randloses Vollbild), wird das Fenster
-//! versteckt, sonst wieder gezeigt. Im Modus "immer" wird nur "always on top" erneuert,
-//! falls eine andere App sich darüber gesetzt hat.
+//! A thread checks the foreground window every 400 ms. If it covers the notch's whole
+//! monitor (game, video, presentation, borderless too), the window is hidden, otherwise
+//! shown again. In "always" mode only "always on top" is reapplied in case another
+//! app put itself above.
 //!
-//! Gaming-Modus "bei Vollbild": statt zu verschwinden bleibt die Notch sichtbar; Rust
-//! meldet `notch://fullscreen`, das Frontend zeigt dann FPS und Auslastung.
-//! `offset` verschiebt die Notch seitlich (per Ziehen), begrenzt auf den Monitor.
+//! Gaming mode "in fullscreen": the notch stays visible instead; Rust emits
+//! `notch://fullscreen` and the frontend shows FPS and load.
+//! `offset` moves the notch sideways (dragging), clamped to the monitor.
 
 use std::sync::Mutex;
 use std::thread;
@@ -29,14 +29,14 @@ pub struct DisplayState(Mutex<Config>);
 #[derive(Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Config {
-    /// true = bei Vollbild ausblenden.
+    /// true = hide during fullscreen.
     hide_fullscreen: bool,
-    /// Monitor-Name ("\\.\DISPLAY2"); None = Hauptmonitor.
+    /// Monitor name ("\\.\DISPLAY2"); None = primary monitor.
     monitor: Option<String>,
-    /// Seitliche Verschiebung aus der Mitte in CSS-px.
+    /// Horizontal offset from the center in CSS px.
     #[serde(default)]
     offset: f64,
-    /// Gaming-Modus "bei Vollbild": nicht ausblenden, nur melden.
+    /// Gaming mode "in fullscreen": don't hide, just report.
     #[serde(default)]
     gaming: bool,
 }
@@ -82,7 +82,7 @@ pub fn display_apply(config: Config, window: WebviewWindow, state: State<'_, Dis
     }
 }
 
-/// Mittig an die Oberkante des gewählten Monitors (sonst Hauptmonitor), bündig ohne Abstand.
+/// Centered and flush at the top of the chosen monitor (primary otherwise).
 pub fn place(window: &WebviewWindow, state: &DisplayState) -> tauri::Result<()> {
     let (wanted, offset) = {
         let c = state.0.lock().unwrap();
@@ -93,8 +93,8 @@ pub fn place(window: &WebviewWindow, state: &DisplayState) -> tauri::Result<()> 
         .and_then(|name| monitors.into_iter().find(|m| m.name() == Some(&name)))
         .or(window.primary_monitor()?);
     let Some(monitor) = monitor else { return Ok(()) };
-    // Zweimal setzen: Beim Wechsel auf einen Monitor mit anderer Skalierung ändert sich
-    // die Fenstergröße erst nach dem ersten Verschieben.
+    // Set twice: when moving to a monitor with different scaling, the window size
+    // only updates after the first move.
     for _ in 0..2 {
         let size = window.outer_size()?;
         let free = (monitor.size().width as i32 - size.width as i32).max(0);
@@ -133,11 +133,11 @@ pub fn spawn(app: AppHandle, window: WebviewWindow) {
                 } else {
                     let _ = window.show();
                     let _ = window.set_always_on_top(true);
-                    // Klick-Durchlass nach show() neu setzen lassen (der Poll merkt sich sonst den alten Stand).
+                    // Let the click-through state be set again after show() (the poll caches the old one).
                     app.state::<HitState>().refresh();
                 }
             }
-            // Neues Vordergrundfenster → "oben" erneuern, falls es sich darüber gelegt hat.
+            // New foreground window: reapply "on top" in case it covered us.
             if !hidden && foreground != last_foreground {
                 let _ = window.set_always_on_top(true);
             }
@@ -146,10 +146,10 @@ pub fn spawn(app: AppHandle, window: WebviewWindow) {
     });
 }
 
-/// Deckt `hwnd` den ganzen Monitor ab, auf dem die Notch (`own`) liegt?
+/// Does `hwnd` cover the whole monitor the notch (`own`) is on?
 fn covers_monitor(hwnd: HWND, own: HWND) -> bool {
-    // Maximierte Fenster sind kein Vollbild — bei automatisch ausgeblendeter Taskleiste
-    // decken sie den Monitor aber auch ganz ab.
+    // Maximized windows aren't fullscreen, but with an auto-hiding taskbar they
+    // cover the whole monitor too.
     if hwnd.is_invalid() || is_desktop(hwnd) || unsafe { IsZoomed(hwnd) }.as_bool() {
         return false;
     }
@@ -168,7 +168,7 @@ fn covers_monitor(hwnd: HWND, own: HWND) -> bool {
     }
 }
 
-/// Desktop und Taskleiste zählen nie als Vollbild.
+/// Desktop and taskbar never count as fullscreen.
 fn is_desktop(hwnd: HWND) -> bool {
     unsafe {
         if hwnd == GetDesktopWindow() || hwnd == GetShellWindow() {

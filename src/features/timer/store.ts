@@ -7,19 +7,19 @@ export type TimerMode = "focus" | "break";
 
 interface TimerState {
   mode: TimerMode;
-  /** Gesamtdauer in Sekunden. */
+  /** Total duration in seconds. */
   duration: number;
-  /** Zeitstempel (Date.now()) des Endes, wenn er läuft. */
+  /** End timestamp (Date.now()) while running. */
   endsAt: number | null;
-  /** Verbleibende Sekunden, wenn pausiert. */
+  /** Remaining seconds while paused. */
   remaining: number;
-  /** Abgelaufen: bleibt stehen, bis der Nutzer schließt (Timer-Ansicht + Live-Aktivität zeigen es). */
+  /** Finished: stays until the user dismisses it (timer view + live activity show it). */
   finished: boolean;
-  /** Zuletzt eingestellte eigene Dauer pro Modus (Sekunden), erscheint als eigener Chip. */
+  /** Last custom duration per mode (seconds), shown as its own chip. */
   custom?: Partial<Record<TimerMode, number>>;
 }
 
-/** Grenzen für eigene Zeiten (Minuten). */
+/** Limits for custom times (minutes). */
 export const MIN_MINUTES = 1;
 export const MAX_MINUTES = 180;
 
@@ -30,10 +30,10 @@ export const presets: Record<TimerMode, number[]> = {
 
 const initial: TimerState = { mode: "focus", duration: 25 * 60, endsAt: null, remaining: 25 * 60, finished: false };
 
-// Persistiert: ein laufender Timer überlebt einen Neustart der App.
+// Persisted: a running timer survives an app restart.
 export const timer = createStore<TimerState>(initial, { persist: "timer" });
 
-/** Klingelt der Alarm gerade? Nicht persistiert — nach Neustart klingelt nichts mehr. */
+/** Is the alarm ringing right now? Not persisted, nothing rings after a restart. */
 export const ringing = createStore(false);
 
 export function remainingOf(s: TimerState, now = Date.now()): number {
@@ -42,13 +42,13 @@ export function remainingOf(s: TimerState, now = Date.now()): number {
 }
 
 export const timerActions = {
-  /** Nur den Ton stoppen; "abgelaufen" bleibt sichtbar. */
+  /** Only stop the sound; "finished" stays visible. */
   silence() {
     stopAlarm();
     window.clearTimeout(ringTimeout);
     ringing.set(false);
   },
-  /** Abgelaufenen Timer schließen: nach Fokus ist eine kurze Pause vorbereitet (nicht gestartet). */
+  /** Dismiss a finished timer: after focus a short break is prepared (not started). */
   dismiss() {
     timerActions.silence();
     timer.set((s) => {
@@ -72,7 +72,7 @@ export const timerActions = {
     timerActions.silence();
     timer.set((s) => ({ ...s, mode, duration, remaining: duration, endsAt: null, finished: false }));
   },
-  /** Eigene Dauer setzen; Werte außerhalb der Presets werden als eigener Chip gemerkt. */
+  /** Sets a custom duration; values outside the presets are remembered as their own chip. */
   setMinutes(minutes: number) {
     const m = Math.round(Math.min(MAX_MINUTES, Math.max(MIN_MINUTES, minutes)));
     timer.set((s) => {
@@ -83,7 +83,7 @@ export const timerActions = {
   },
 };
 
-// Ablauf überwachen (eine Stelle für die ganze App).
+// Watch for the end (one place for the whole app).
 let ringTimeout: number | undefined;
 setInterval(() => {
   const s = timer.get();
@@ -93,12 +93,12 @@ setInterval(() => {
     timer.set((t) => ({ ...t, remaining: 0, endsAt: null, finished: true }));
     ringing.set(true);
     window.clearTimeout(ringTimeout);
-    // Gleiche Länge wie in playAlarm ("bis Stopp" = höchstens 2 min).
+    // Same length as in playAlarm ("until stopped" = at most 2 min).
     ringTimeout = window.setTimeout(() => ringing.set(false), (ring === -1 ? 120 : Math.max(3, ring)) * 1000);
   }
 }, 250);
 
-/** Verbleibende Sekunden, aktualisiert jede Sekunde-Grenze. */
+/** Remaining seconds, updated on every second boundary. */
 export function useRemaining(): number {
   const s = timer.use();
   const [now, setNow] = useState(Date.now);

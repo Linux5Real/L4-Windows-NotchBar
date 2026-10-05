@@ -1,9 +1,9 @@
-//! Converter für Text-Dokumente und Tabellen.
+//! Converter for text documents and spreadsheets.
 //!
-//! - Dokumente (txt, md, html, pdf, docx) → txt, md, html, docx, pdf.
-//!   Zwischenform ist Markdown bzw. reiner Text; PDF-Ausgabe druckt das HTML mit dem
-//!   ohnehin installierten Edge (headless), PDF-Eingabe liest nur den Text.
-//! - Tabellen (xlsx, xls, ods, csv, tsv) → xlsx, csv, json, html, pdf. Nur das erste Blatt.
+//! - Documents (txt, md, html, pdf, docx) → txt, md, html, docx, pdf.
+//!   The intermediate form is Markdown or plain text. PDF output prints the HTML with
+//!   the Edge that ships with Windows (headless); PDF input only reads the text.
+//! - Spreadsheets (xlsx, xls, ods, csv, tsv) → xlsx, csv, json, html, pdf. First sheet only.
 
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -14,7 +14,7 @@ use pulldown_cmark::{Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 pub const DOC_IN: &[&str] = &["txt", "md", "markdown", "html", "htm", "pdf", "docx"];
 pub const TABLE_IN: &[&str] = &["xlsx", "xlsm", "xls", "ods", "csv", "tsv"];
 
-/// Gelesener Inhalt: Markdown behält Überschriften/Listen, Text ist nur Zeilen.
+/// Parsed content: Markdown keeps headings/lists, text is just lines.
 enum Source {
     Plain(String),
     Markdown(String),
@@ -52,7 +52,7 @@ pub fn convert_table(input: &Path, output: &Path, ext: &str, target: &str) -> Re
     }
 }
 
-// ── Lesen ────────────────────────────────────────────────────────────────────
+// ── Reading ──────────────────────────────────────────────────────────────────
 
 fn read_document(input: &Path, ext: &str) -> Result<Source, String> {
     let text = || {
@@ -69,7 +69,7 @@ fn read_document(input: &Path, ext: &str) -> Result<Source, String> {
     })
 }
 
-/// pdf-extract liefert viele Leerzeilen; auf höchstens eine zusammenfassen.
+/// pdf-extract emits lots of blank lines; collapse them to at most one.
 fn tidy_pdf_text(s: &str) -> String {
     let mut out = String::new();
     let mut blank = 0;
@@ -88,7 +88,7 @@ fn tidy_pdf_text(s: &str) -> String {
     out.trim().to_string() + "\n"
 }
 
-/// Absätze aus word/document.xml; Überschriften und Listen werden zu Markdown.
+/// Paragraphs from word/document.xml; headings and lists become Markdown.
 fn docx_to_markdown(input: &Path) -> Result<String, String> {
     use quick_xml::events::Event as X;
     let file = std::fs::File::open(input).map_err(|e| format!("Datei nicht lesbar: {e}"))?;
@@ -113,7 +113,7 @@ fn docx_to_markdown(input: &Path) -> Result<String, String> {
                 "pStyle" => {
                     if let Some(v) = e.attributes().flatten().find(|a| AsRef::<str>::as_ref(&a.key.local_name()) == "val") {
                         let v = v.value.to_lowercase();
-                        // "Heading1", "berschrift1" (deutsches Word), "Title".
+                        // "Heading1", "berschrift1" (German Word), "Title".
                         if v.starts_with("heading") || v.contains("berschrift") {
                             heading = v.chars().filter(char::is_ascii_digit).collect::<String>().parse().unwrap_or(1).clamp(1, 6);
                         } else if v == "title" {
@@ -139,7 +139,7 @@ fn docx_to_markdown(input: &Path) -> Result<String, String> {
                 "p" => {
                     let text = para.trim();
                     let is_list = (list || text.starts_with("• ")) && !text.is_empty();
-                    // Nach einer Liste vor dem nächsten Nicht-Listen-Absatz eine Leerzeile.
+                    // Blank line after a list before the next non-list paragraph.
                     if !is_list && out.ends_with('\n') && !out.ends_with("\n\n") {
                         out.push('\n');
                     }
@@ -162,7 +162,7 @@ fn docx_to_markdown(input: &Path) -> Result<String, String> {
     Ok(out.trim_end().to_string() + "\n")
 }
 
-/// Grobe HTML → Markdown-Umsetzung (Überschriften, Absätze, Listen, Zeilenumbrüche).
+/// Rough HTML → Markdown (headings, paragraphs, lists, line breaks).
 fn html_to_markdown(html: &str) -> String {
     let body = html.find("<body").and_then(|i| html[i..].find('>').map(|j| &html[i + j + 1..])).unwrap_or(html);
     let mut out = String::new();
@@ -194,7 +194,7 @@ fn html_to_markdown(html: &str) -> String {
     if !skip {
         out.push_str(&decode_entities(rest));
     }
-    // Leerzeilen zusammenfassen, Zeilen trimmen.
+    // Collapse blank lines, trim lines.
     let mut tidy = String::new();
     for line in out.lines().map(str::trim) {
         if line.is_empty() && (tidy.is_empty() || tidy.ends_with("\n\n")) {
@@ -206,7 +206,7 @@ fn html_to_markdown(html: &str) -> String {
     tidy.trim().to_string() + "\n"
 }
 
-/// Leerraum auf ein Leerzeichen zusammenfassen, Ränder dabei erhalten ("Ein <b>Absatz</b>").
+/// Collapses whitespace to one space but keeps the edges ("A <b>paragraph</b>").
 fn collapse_spaces(s: &str) -> String {
     let mut out = String::new();
     let mut space = false;
@@ -236,7 +236,7 @@ fn read_table(input: &Path, ext: &str) -> Result<Vec<Vec<String>>, String> {
     if ext == "csv" || ext == "tsv" {
         let bytes = std::fs::read(input).map_err(|e| format!("Datei nicht lesbar: {e}"))?;
         let text = String::from_utf8_lossy(bytes.strip_prefix(b"\xEF\xBB\xBF").unwrap_or(&bytes)).into_owned();
-        // Trennzeichen raten: das häufigste in der ersten Zeile (deutsches Excel nimmt ";").
+        // Guess the delimiter: the most common one in the first line (German Excel uses ";").
         let first = text.lines().next().unwrap_or("");
         let delimiter = if ext == "tsv" { b'\t' } else { [b';', b',', b'\t'].into_iter().max_by_key(|d| first.matches(*d as char).count()).unwrap_or(b',') };
         let mut reader = csv::ReaderBuilder::new().delimiter(delimiter).has_headers(false).flexible(true).from_reader(text.as_bytes());
@@ -254,7 +254,7 @@ fn cell_text(c: &calamine::Data) -> String {
     use calamine::{Data, DataType};
     match c {
         Data::Empty => String::new(),
-        // Datum als 2026-10-05 (bzw. mit Uhrzeit), nicht als Excel-Seriennummer.
+        // Dates as 2026-10-05 (with time if present), not as Excel serial numbers.
         Data::DateTime(_) => c
             .as_datetime()
             .map(|d| d.to_string().trim_end_matches(" 00:00:00").to_string())
@@ -263,7 +263,7 @@ fn cell_text(c: &calamine::Data) -> String {
     }
 }
 
-// ── Schreiben ────────────────────────────────────────────────────────────────
+// ── Writing ──────────────────────────────────────────────────────────────────
 
 fn write_text(output: &Path, text: &str) -> Result<(), String> {
     std::fs::write(output, text).map_err(|e| format!("Kann nicht speichern: {e}"))
@@ -338,7 +338,7 @@ fn table_html(rows: &[Vec<String>], title: &str) -> String {
 }
 
 fn write_csv(output: &Path, rows: &[Vec<String>]) -> Result<(), String> {
-    // ";" + BOM: so öffnet deutsches Excel die Datei direkt richtig.
+    // ";" + BOM so German Excel opens the file correctly right away.
     let mut w = csv::WriterBuilder::new().delimiter(b';').flexible(true).from_writer(Vec::from(&b"\xEF\xBB\xBF"[..]));
     for row in rows {
         w.write_record(row).map_err(|e| e.to_string())?;
@@ -366,7 +366,7 @@ fn write_xlsx(output: &Path, rows: &[Vec<String>]) -> Result<(), String> {
     book.save(output).map_err(|e| format!("Kann nicht speichern: {e}"))
 }
 
-/// Zahl erkennen (auch "1,5" aus deutschem CSV); "007" oder PLZ bleiben Text.
+/// Detects numbers (also "1,5" from German CSV); "007" or postcodes stay text.
 fn as_number(value: &str) -> Option<f64> {
     let v = value.trim();
     if v.is_empty() || (v.len() > 1 && v.starts_with('0') && !v.starts_with("0,") && !v.starts_with("0.")) {
@@ -376,7 +376,7 @@ fn as_number(value: &str) -> Option<f64> {
 }
 
 fn write_json(output: &Path, rows: &[Vec<String>]) -> Result<(), String> {
-    // Erste Zeile = Spaltennamen → Liste von Objekten.
+    // First row = column names → list of objects.
     let header = &rows[0];
     let items: Vec<serde_json::Value> = rows[1..]
         .iter()
@@ -396,7 +396,7 @@ fn write_json(output: &Path, rows: &[Vec<String>]) -> Result<(), String> {
     write_text(output, &(text + "\n"))
 }
 
-/// Minimales DOCX (Word, LibreOffice, Google Docs öffnen es): Absätze, Überschriften, Listen.
+/// Minimal DOCX (opens in Word, LibreOffice, Google Docs): paragraphs, headings, lists.
 fn write_docx(output: &Path, source: &Source) -> Result<(), String> {
     let mut body = String::new();
     let para = |style: Option<&str>, text: &str| {
@@ -433,7 +433,7 @@ fn write_docx(output: &Path, source: &Source) -> Result<(), String> {
                             body.push_str(&para(style.as_deref(), text.trim_end()));
                         }
                         text.clear();
-                        // Absatz innerhalb eines Listenpunkts: Stil bis zum Ende des Punkts behalten.
+                        // Paragraph inside a list item: keep the style until the item ends.
                         if !ends_para || style.as_deref() != Some("ListBullet") {
                             style = None;
                         }
@@ -458,7 +458,7 @@ fn write_docx(output: &Path, source: &Source) -> Result<(), String> {
         style("ListBullet", 22, false, "<w:ind w:left=\"360\" w:hanging=\"0\"/>"),
         style("Code", 20, false, "<w:shd w:val=\"clear\" w:fill=\"F2F2F4\"/>"),
     );
-    // Listenpunkte ohne Nummerierungsdefinition: "• " davor setzen.
+    // List items without a numbering definition: prefix "• ".
     let document = document.replace("<w:pStyle w:val=\"ListBullet\"/></w:pPr><w:r><w:t xml:space=\"preserve\">", "<w:pStyle w:val=\"ListBullet\"/></w:pPr><w:r><w:t xml:space=\"preserve\">• ");
 
     let files: [(&str, String); 4] = [
@@ -484,7 +484,7 @@ fn write_docx(output: &Path, source: &Source) -> Result<(), String> {
     })
 }
 
-/// HTML mit Edge (bei jedem Windows dabei) bzw. Chrome headless als PDF drucken.
+/// Prints HTML to PDF with headless Edge (ships with Windows) or Chrome.
 fn print_pdf(html: &str, output: &Path) -> Result<(), String> {
     let browser = pdf_browser().ok_or("Für PDF wird Microsoft Edge oder Chrome benötigt")?;
     let dir = std::env::temp_dir().join(format!("notch-pdf-{}", std::process::id()));
@@ -497,7 +497,7 @@ fn print_pdf(html: &str, output: &Path) -> Result<(), String> {
         .arg("--disable-gpu")
         .arg("--no-pdf-header-footer")
         .arg("--no-first-run")
-        // Eigenes Profil: sonst übernimmt ein schon offenes Edge den Aufruf und es entsteht nichts.
+        // Separate profile, otherwise an already open Edge takes over and nothing is written.
         .arg(format!("--user-data-dir={}", dir.join("profile").display()))
         .arg(format!("--print-to-pdf={}", output.display()))
         .arg(format!("file:///{}", page.display().to_string().replace('\\', "/")));

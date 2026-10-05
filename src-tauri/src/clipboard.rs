@@ -1,8 +1,8 @@
-//! Zwischenablage-Verlauf.
+//! Clipboard history.
 //!
-//! Ein Thread prüft `GetClipboardSequenceNumber` (billig, ohne Fenster) und liest
-//! bei jeder Änderung den Inhalt. Inhalte von Passwort-Managern werden übersprungen.
-//! Der Verlauf lebt nur im Speicher — nach einem Neustart ist er leer (Datenschutz).
+//! A thread polls `GetClipboardSequenceNumber` (cheap, no window needed) and reads the
+//! content on every change. Password manager content is skipped.
+//! History lives in memory only and is empty after a restart (privacy).
 
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
@@ -23,12 +23,12 @@ use windows::Win32::System::DataExchange::{
 use windows::Win32::System::Memory::{GlobalLock, GlobalSize, GlobalUnlock};
 
 const MAX_ITEMS: usize = 40;
-/// Volle Bilder sind groß (4K ≈ 33 MB RGBA) — nur die neuesten behalten.
+/// Full images are large (4K ≈ 33 MB RGBA), so only the newest are kept.
 const MAX_IMAGES: usize = 8;
 const THUMB_SIZE: u32 = 240;
 const PREVIEW_CHARS: usize = 400;
 const POLL: Duration = Duration::from_millis(300);
-/// Größere Bilddateien werden nicht für eine Vorschau geladen.
+/// Larger image files are not loaded for a preview.
 const MAX_THUMB_FILE_BYTES: u64 = 40 * 1024 * 1024;
 const IMAGE_EXTENSIONS: [&str; 7] = ["png", "jpg", "jpeg", "webp", "gif", "bmp", "ico"];
 
@@ -44,7 +44,7 @@ struct Entry {
     item: ClipItem,
 }
 
-/// Was das Frontend sieht — ohne die vollen Daten.
+/// What the frontend sees, without the full data.
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ClipItem {
@@ -52,19 +52,19 @@ pub struct ClipItem {
     /// "text" | "link" | "image" | "files"
     kind: &'static str,
     text: String,
-    /// PNG-Vorschau als Data-URL (Bilder und kopierte Bilddateien).
+    /// PNG preview as a data URL (images and copied image files).
     thumbnail: Option<String>,
-    /// Dateien: wie viele der Einträge Ordner sind (für das Symbol).
+    /// Files: how many entries are folders (for the icon).
     folders: usize,
-    /// Unix-Zeit in ms.
+    /// Unix time in ms.
     copied_at: u64,
 }
 
 #[derive(Default)]
 pub struct ClipboardState {
     entries: Mutex<Vec<Entry>>,
-    /// Zuletzt gesehene Sequenznummer; wird beim eigenen Kopieren mitgeführt,
-    /// damit das Zurückkopieren keinen Doppeleintrag erzeugt.
+    /// Last seen sequence number. Updated on our own copies so copying an entry back
+    /// doesn't create a duplicate.
     last_seq: Mutex<u32>,
     next_id: Mutex<u64>,
 }
@@ -88,7 +88,7 @@ pub fn clipboard_copy(id: u64, app: AppHandle, state: State<'_, ClipboardState>)
         .map_err(|e| e.to_string())?;
         *state.last_seq.lock().unwrap() = unsafe { GetClipboardSequenceNumber() };
 
-        // Wieder nach oben, mit frischem Zeitstempel.
+        // Move to the top with a fresh timestamp.
         let mut entry = entries.remove(index);
         entry.item.copied_at = now_ms();
         entries.insert(0, entry);
@@ -109,7 +109,7 @@ pub fn clipboard_clear(app: AppHandle, state: State<'_, ClipboardState>) {
     emit(&app, &state);
 }
 
-/// Große Vorschau eines Bild-Eintrags (kopiertes Bild oder erste Bilddatei).
+/// Large preview of an image entry (copied image or first image file).
 #[derive(Serialize)]
 pub struct Preview {
     src: String,
@@ -121,7 +121,7 @@ const PREVIEW_SIZE: u32 = 1400;
 
 #[tauri::command]
 pub async fn clipboard_preview(id: u64, state: State<'_, ClipboardState>) -> Result<Option<Preview>, String> {
-    // Bilddaten kopieren und das Lock sofort freigeben; das Kodieren dauert.
+    // Copy the image data and release the lock right away; encoding takes a while.
     enum Source {
         Pixels(image::RgbaImage),
         File(PathBuf),
@@ -153,8 +153,8 @@ pub async fn clipboard_preview(id: u64, state: State<'_, ClipboardState>) -> Res
     .map_err(|e| e.to_string())
 }
 
-/// Strg+V in Ablage/Converter: Dateien aus der Zwischenablage als Pfade. Ein kopiertes
-/// Bild (Screenshot) wird als PNG unter Bilder/Notch gespeichert und dieser Pfad geliefert.
+/// Ctrl+V in Shelf/Converter: files from the clipboard as paths. A copied image
+/// (screenshot) is saved as PNG under Pictures/Notch and that path is returned.
 #[tauri::command]
 pub async fn clipboard_paste_files() -> Result<Vec<String>, String> {
     tauri::async_runtime::spawn_blocking(|| {
@@ -181,7 +181,7 @@ fn pictures_dir() -> PathBuf {
     home.join("Pictures")
 }
 
-/// "2026-10-04 22-41-03" in Ortszeit (für Dateinamen).
+/// "2026-10-04 22-41-03" in local time (for file names).
 fn local_stamp() -> String {
     use windows::Win32::System::SystemInformation::GetLocalTime;
     let t = unsafe { GetLocalTime() };
@@ -192,7 +192,7 @@ pub fn spawn(app: AppHandle) {
     thread::spawn(move || {
         let formats = PrivateFormats::register();
         let state = app.state::<ClipboardState>();
-        // Was beim Start schon drin ist, nicht übernehmen.
+        // Ignore whatever is already in the clipboard at startup.
         *state.last_seq.lock().unwrap() = unsafe { GetClipboardSequenceNumber() };
 
         loop {
@@ -202,7 +202,7 @@ pub fn spawn(app: AppHandle) {
                 continue;
             }
 
-            // Zwischenablage kann kurz von einer anderen App gesperrt sein → nächster Durchlauf.
+            // Another app may hold the clipboard briefly; try again next round.
             let content = if formats.is_private() { Some(None) } else { read_content() };
             let Some(content) = content else { continue };
             *state.last_seq.lock().unwrap() = seq;
@@ -215,12 +215,12 @@ pub fn spawn(app: AppHandle) {
     });
 }
 
-/// Formate, mit denen Passwort-Manager (KeePass, 1Password, Bitwarden …) ihre
-/// Inhalte als "nicht protokollieren" markieren.
+/// Formats password managers (KeePass, 1Password, Bitwarden …) use to mark content
+/// as "don't record".
 struct PrivateFormats {
-    /// Allein das Vorhandensein heißt: nicht aufzeichnen.
+    /// Presence alone means: don't record.
     exclude: [u32; 2],
-    /// Nur der DWORD-Wert 0 heißt: nicht in den Verlauf.
+    /// Only a DWORD value of 0 means: keep out of history.
     can_include: u32,
 }
 
@@ -261,7 +261,7 @@ fn read_dword(format: u32) -> Option<u32> {
     }
 }
 
-/// `None` = gerade nicht lesbar (erneut versuchen), `Some(None)` = nichts Brauchbares.
+/// `None` = not readable right now (retry), `Some(None)` = nothing useful.
 fn read_content() -> Option<Option<Content>> {
     let mut clipboard = Clipboard::new().ok()?;
     if let Ok(files) = clipboard.get().file_list() {
@@ -273,8 +273,8 @@ fn read_content() -> Option<Option<Content>> {
     let image = clipboard.get_image().ok();
 
     Some(match (text, image) {
-        // Browser legen beim "Bild kopieren" oft die Bild-URL als Text dazu → Bild gewinnt.
-        // Office legt zu Text ein Bild der Zellen ab → dort gewinnt der Text.
+        // Browsers often add the image URL as text on "Copy image", so the image wins.
+        // Office adds an image of the cells to text, so text wins there.
         (Some(t), Some(img)) if is_url(t.trim()) => Some(Content::Image(img.to_owned_img())),
         (Some(t), _) => Some(Content::Text(t)),
         (None, Some(img)) => Some(Content::Image(img.to_owned_img())),
@@ -290,7 +290,7 @@ fn is_url(text: &str) -> bool {
 fn add(state: &ClipboardState, content: Content) {
     let mut entries = state.entries.lock().unwrap();
 
-    // Gleicher Text nochmal kopiert → bestehenden Eintrag nach oben holen.
+    // Same text copied again: move the existing entry to the top.
     if let Content::Text(new) = &content {
         if let Some(i) = entries.iter().position(|e| matches!(&e.content, Content::Text(t) if t == new)) {
             let mut entry = entries.remove(i);
@@ -350,7 +350,7 @@ fn describe(id: u64, content: &Content) -> Option<ClipItem> {
                 .iter()
                 .map(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| p.display().to_string()))
                 .collect();
-            // Erste Bilddatei als Vorschau, damit kopierte Fotos auch wie Fotos aussehen.
+            // First image file as preview, so copied photos look like photos.
             let thumbnail = files.iter().find(|p| is_image_file(p)).and_then(|p| file_thumbnail(p));
             let folders = files.iter().filter(|p| p.is_dir()).count();
             ClipItem { id, kind: "files", text: names.join("\n"), thumbnail, folders, copied_at }

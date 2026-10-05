@@ -20,9 +20,11 @@
 
 https://github.com/user-attachments/assets/0883a7b8-6197-4a75-9c49-da58bf644983
 
-A Dynamic-Island-style notch for Windows. It sits at the top of your screen, stays out of the way until you need it, and opens on hover, click or **Ctrl + Alt + Space**. Music, timers, files, your portfolio and a Discord call are all one glance away.
+A Dynamic-Island-style notch for Windows. It sits at the top of your screen, stays out of the way until you need it, and opens on hover, click or **Ctrl + Alt + Space**.
 
-It is small and fast: a single executable of a few megabytes, smooth animations, and everything you don't need can be hidden.
+Inside: music controls with a live equalizer, live weather, your Discord call, your portfolio, an AI chat (Claude, ChatGPT and more) with your usage limits, clipboard history, a file shelf, a file and unit converter, timers, to-dos and notes, live hardware stats with FPS for games, and privacy dots for mic, camera and screen recording.
+
+Make it yours: reorder or hide any tool, move the notch, pick the monitor, hide it automatically in fullscreen apps, or triple-click it to fade it out when it's in the way. All of that in a single executable of a few megabytes, with smooth animations throughout.
 
 > [!TIP]
 > **Missing something?** If you have an idea for a new tool, a feature you'd love to see or something that bugs you, just [open an issue](https://github.com/Linux5Real/L4-Windows-NotchBar/issues/new) and describe it. Every idea is welcome.

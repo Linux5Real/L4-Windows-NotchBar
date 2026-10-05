@@ -25,6 +25,10 @@ export function NotchShape({ geometry, transition, elevated, children }: Props) 
   const ear = useMotionValue(geometry.ear);
   const shadow = useMotionValue(elevated ? 1 : 0);
   const earOffset = useTransform(ear, (e) => -e + 0.5); // 0.5px overlap against hairlines
+  // Whole device pixels: the shape is centered, so an odd or fractional size puts its edges
+  // (and the cover pinned to them) on subpixels that shift every frame, which reads as jitter.
+  const wPx = useTransform(w, snap);
+  const hPx = useTransform(h, snap);
 
   const first = useRef(true);
   useEffect(() => {
@@ -47,7 +51,7 @@ export function NotchShape({ geometry, transition, elevated, children }: Props) 
   }, [elevated, shadow]);
 
   return (
-    <motion.div className="relative" style={{ width: w, height: h }}>
+    <motion.div className="relative" style={{ width: wPx, height: hPx }}>
       <motion.span
         aria-hidden
         className="absolute top-0"
@@ -89,4 +93,10 @@ export function NotchShape({ geometry, transition, elevated, children }: Props) 
       </motion.div>
     </motion.div>
   );
+}
+
+/** Nearest size that is an even number of device pixels, so both centered edges land on whole pixels. */
+function snap(v: number): number {
+  const dpr = window.devicePixelRatio || 1;
+  return (Math.round((v * dpr) / 2) * 2) / dpr;
 }

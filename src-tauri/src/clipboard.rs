@@ -23,7 +23,7 @@ use windows::Win32::System::DataExchange::{
 use windows::Win32::System::Memory::{GlobalLock, GlobalSize, GlobalUnlock};
 
 const MAX_ITEMS: usize = 40;
-/// Full images are large (4K ≈ 33 MB RGBA), so only the newest are kept.
+/// Only the newest images are kept (stored as PNG, a screenshot is roughly 0.5–3 MB).
 const MAX_IMAGES: usize = 8;
 const THUMB_SIZE: u32 = 240;
 const PREVIEW_CHARS: usize = 400;
@@ -34,8 +34,37 @@ const IMAGE_EXTENSIONS: [&str; 7] = ["png", "jpg", "jpeg", "webp", "gif", "bmp",
 
 enum Content {
     Text(String),
-    Image(ImageData<'static>),
+    Image(StoredImage),
     Files(Vec<PathBuf>),
+}
+
+/// A copied image, kept as PNG: raw RGBA held a 4K screenshot at 33 MB, so a few
+/// screenshots in the history took hundreds of MB.
+struct StoredImage {
+    width: u32,
+    height: u32,
+    png: Vec<u8>,
+    thumbnail: String,
+}
+
+impl StoredImage {
+    fn new(img: ImageData<'_>) -> Option<Self> {
+        let rgba = image::RgbaImage::from_raw(img.width as u32, img.height as u32, img.bytes.into_owned())?;
+        let thumbnail = thumbnail(&rgba)?;
+        let mut png = Vec::new();
+        // Fast compression: a 4K screenshot takes well under a second on the poll thread.
+        let encoder = image::codecs::png::PngEncoder::new_with_quality(
+            &mut png,
+            image::codecs::png::CompressionType::Fast,
+            image::codecs::png::FilterType::Adaptive,
+        );
+        rgba.write_with_encoder(encoder).ok()?;
+        Some(Self { width: rgba.width(), height: rgba.height(), png, thumbnail })
+    }
+
+    fn rgba(&self) -> Option<image::RgbaImage> {
+        Some(image::load_from_memory_with_format(&self.png, image::ImageFormat::Png).ok()?.to_rgba8())
+    }
 }
 
 struct Entry {
@@ -82,7 +111,10 @@ pub fn clipboard_copy(id: u64, app: AppHandle, state: State<'_, ClipboardState>)
         let mut clipboard = Clipboard::new().map_err(|e| e.to_string())?;
         match &entries[index].content {
             Content::Text(t) => clipboard.set_text(t.clone()),
-            Content::Image(img) => clipboard.set_image(img.clone()),
+            Content::Image(img) => {
+                let rgba = img.rgba().ok_or("Bild unlesbar")?;
+                clipboard.set_image(ImageData { width: img.width as usize, height: img.height as usize, bytes: rgba.into_raw().into() })
+            }
             Content::Files(files) => clipboard.set().file_list(files),
         }
         .map_err(|e| e.to_string())?;
@@ -123,14 +155,14 @@ const PREVIEW_SIZE: u32 = 1400;
 pub async fn clipboard_preview(id: u64, state: State<'_, ClipboardState>) -> Result<Option<Preview>, String> {
     // Copy the image data and release the lock right away; encoding takes a while.
     enum Source {
-        Pixels(image::RgbaImage),
+        Png(Vec<u8>),
         File(PathBuf),
     }
     let source = {
         let entries = state.entries.lock().unwrap();
         let Some(entry) = entries.iter().find(|e| e.id == id) else { return Ok(None) };
         match &entry.content {
-            Content::Image(img) => image::RgbaImage::from_raw(img.width as u32, img.height as u32, img.bytes.to_vec()).map(Source::Pixels),
+            Content::Image(img) => Some(Source::Png(img.png.clone())),
             Content::Files(files) => files.iter().find(|p| is_image_file(p)).cloned().map(Source::File),
             Content::Text(_) => None,
         }
@@ -138,7 +170,7 @@ pub async fn clipboard_preview(id: u64, state: State<'_, ClipboardState>) -> Res
     let Some(source) = source else { return Ok(None) };
     tauri::async_runtime::spawn_blocking(move || {
         let rgba = match source {
-            Source::Pixels(p) => p,
+            Source::Png(png) => image::load_from_memory_with_format(&png, image::ImageFormat::Png).ok()?.to_rgba8(),
             Source::File(path) => image::open(path).ok()?.to_rgba8(),
         };
         let (width, height) = rgba.dimensions();
@@ -275,9 +307,9 @@ fn read_content() -> Option<Option<Content>> {
     Some(match (text, image) {
         // Browsers often add the image URL as text on "Copy image", so the image wins.
         // Office adds an image of the cells to text, so text wins there.
-        (Some(t), Some(img)) if is_url(t.trim()) => Some(Content::Image(img.to_owned_img())),
+        (Some(t), Some(img)) if is_url(t.trim()) => StoredImage::new(img).map(Content::Image),
         (Some(t), _) => Some(Content::Text(t)),
-        (None, Some(img)) => Some(Content::Image(img.to_owned_img())),
+        (None, Some(img)) => StoredImage::new(img).map(Content::Image),
         (None, None) => None,
     })
 }
@@ -335,12 +367,11 @@ fn describe(id: u64, content: &Content) -> Option<ClipItem> {
             }
         }
         Content::Image(img) => {
-            let rgba = image::RgbaImage::from_raw(img.width as u32, img.height as u32, img.bytes.to_vec())?;
             ClipItem {
                 id,
                 kind: "image",
                 text: format!("{} × {}", img.width, img.height),
-                thumbnail: Some(thumbnail(&rgba)?),
+                thumbnail: Some(img.thumbnail.clone()),
                 folders: 0,
                 copied_at,
             }
@@ -390,4 +421,31 @@ fn emit(app: &AppHandle, state: &ClipboardState) {
 
 fn now_ms() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A 4K "screenshot" tiled from a real one: round trip is lossless and far smaller than RGBA.
+    #[test]
+    fn stored_image_is_lossless_and_compact() {
+        let tile = image::open(concat!(env!("CARGO_MANIFEST_DIR"), "/../docs/media/vault-passwords.png")).unwrap().to_rgba8();
+        let (w, h) = (3840, 2160);
+        let shot = image::RgbaImage::from_fn(w, h, |x, y| *tile.get_pixel(x % tile.width(), y % tile.height()));
+        let raw = shot.as_raw().len();
+
+        let started = std::time::Instant::now();
+        let stored = StoredImage::new(ImageData { width: w as usize, height: h as usize, bytes: shot.as_raw().clone().into() }).unwrap();
+        let encode = started.elapsed();
+        let started = std::time::Instant::now();
+        let back = stored.rgba().unwrap();
+        let decode = started.elapsed();
+
+        println!("raw {} MB → png {:.2} MB, encode {encode:?}, decode {decode:?}", raw / 1_048_576, stored.png.len() as f64 / 1_048_576.0);
+        assert_eq!((stored.width, stored.height), (w, h));
+        assert!(back == shot, "pixels changed");
+        assert!(stored.png.len() * 5 < raw, "not compressed enough");
+        assert!(stored.thumbnail.starts_with("data:image/png;base64,"));
+    }
 }

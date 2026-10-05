@@ -22,6 +22,7 @@ import { HeaderActions, HeaderButton } from "../../notch/header";
 import { Button, Empty, Segmented, Skeleton } from "../../ui/controls";
 import { refreshVault, vault, vaultError, vaultStatus, type VaultCode, type VaultItem, type VaultKind } from "../../platform/vault";
 import { PinEntry, unlockResult } from "./PinEntry";
+import { HelloPrompt } from "./HelloPrompt";
 import { PasswordForm, TotpForm } from "./forms";
 import { errorText } from "./errors";
 import { t } from "../../i18n";
@@ -93,6 +94,18 @@ export function VaultView() {
   } else if (!status.hasPin) {
     key = "setup";
     body = <Setup />;
+  } else if (prompt && status.hello) {
+    key = "hello";
+    body = (
+      <HelloPrompt
+        onCancel={() => setPrompt(null)}
+        onUnlocked={async () => {
+          const retry = prompt;
+          setPrompt(null);
+          await run(retry);
+        }}
+      />
+    );
   } else if (prompt) {
     key = "pin";
     body = (
@@ -125,7 +138,7 @@ export function VaultView() {
     );
   } else if (screen.kind === "totp") {
     key = "totp";
-    body = <TotpForm onDone={() => setScreen({ kind: "list" })} />;
+    body = <TotpForm onDone={() => setScreen({ kind: "list" })} run={run} />;
   } else {
     key = "list";
     body = (

@@ -73,6 +73,12 @@ Passwords and two-factor codes, one hover away and encrypted on your PC.
 - **4-digit PIN** before anything secret is shown or copied, adjustable for passwords and 2FA separately in **Settings → Tools → Vault**. Five wrong tries lock it for 30 seconds, doubling from there.
 - **Never in clipboard history.** Copies skip the Notch clipboard and Windows' Win + V history, and passwords and codes leave the clipboard after 30 seconds.
 - **Local only**, encrypted with Windows DPAPI and bound to your Windows account. Forgot the PIN? **Reset vault** in settings deletes everything; there is no back door.
+- **Windows Hello (new in 1.2, optional):** unlock with face, fingerprint or Windows PIN instead of the vault PIN. Secrets are then additionally encrypted with a key from your PC's security chip, so even malware running as you can't read them without your confirmation.
+
+<p>
+  <img src="docs/media/vault-hello.png" width="49%" alt="The vault asking for Windows Hello" />
+  <img src="docs/media/vault-hello-settings.png" width="49%" alt="Windows Hello switch in the vault settings" />
+</p>
 
 The vault is off by default; turn it on under **Settings → Tools**.
 
@@ -126,7 +132,7 @@ Every integration is optional. Tools you don't connect simply stay out of your w
 L4-Notchbar has no account, no server of its own, no analytics and no tracking. Everything it stores (settings, to-dos, notes, timer presets) lives on your machine. The clipboard history is kept in memory only and never written to disk.
 
 - **Keys and secrets** are stored in the Windows Credential Manager, never in a plain file, and they are never sent back to the interface.
-- **The vault** lives in one file encrypted with Windows DPAPI, readable only under your Windows account. The PIN is checked in the app's backend, not in the interface, and 2FA keys never leave the backend.
+- **The vault** lives in one file encrypted with Windows DPAPI, readable only under your Windows account. The PIN is checked in the app's backend, not in the interface, and 2FA keys never leave the backend. With Windows Hello turned on, secrets are additionally sealed with AES-256-GCM under a TPM-backed Windows Hello key.
 - **Integrations talk directly to their own service** and nowhere else: Ask to the AI provider you chose, Portfolio to Trading 212, Discord to the Discord app on your PC (and discord.com for the sign-in), AI usage to the provider you are signed in to, Weather to Open-Meteo (plus an IP-based city lookup unless you picked a city). If you don't set an integration up, it makes no requests.
 - **Updates.** Once a day the app makes a single anonymous request to this repository's public release page to check for a new version. No personal data is sent. If an update exists, a dot appears on the gear icon and **Settings → General → Updates** shows it. Nothing is downloaded until you click **Update now**; the app then installs the update and restarts. Every update is cryptographically signed and verified before it is installed. You can turn the daily check off in the same place.
 

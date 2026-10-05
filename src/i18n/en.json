@@ -428,5 +428,14 @@
  "optional": "optional",
  "z. B. GitHub": "e.g. GitHub",
  "{name}: Code kopieren": "{name}: copy code",
- "Ändern": "Change"
+ "Ändern": "Change",
+ "Erneut versuchen": "Try again",
+ "Ersetzt den PIN. Wird Windows Hello zurückgesetzt, sind die Einträge verloren.": "Replaces the PIN. If Windows Hello is reset, the entries are lost.",
+ "Gesicht, Finger oder Windows-PIN bestätigen": "Confirm with face, finger or Windows PIN",
+ "Gesicht, Finger oder Windows-PIN statt des eigenen PINs": "Face, finger or Windows PIN instead of the vault PIN",
+ "Löscht alle Einträge.": "Deletes every entry.",
+ "Mit Windows Hello entsperren": "Unlock with Windows Hello",
+ "Windows Hello": "Windows Hello",
+ "Windows Hello hat nicht geklappt": "Windows Hello didn't work",
+ "Windows-Hello-Schlüssel fehlt": "Windows Hello key is missing"
 }

@@ -1,6 +1,6 @@
 [package]
 name = "notch"
-version = "1.1.0"
+version = "1.2.0"
 edition = "2021"
 license = "GPL-3.0-only"
 
@@ -38,6 +38,7 @@ hmac = "0.12"
 sha1 = "0.10"
 sha2 = "0.10"
 rqrr = { version = "0.10", default-features = false }
+aes-gcm = "0.10"
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
 
@@ -46,6 +47,8 @@ webview2-com = "0.39"
 windows = { version = "0.62", features = [
   "Foundation",
   "Foundation_Collections",
+  "Security_Credentials",
+  "Security_Cryptography",
   "Media_Control",
   "UI_Shell",
   "Storage_Streams",

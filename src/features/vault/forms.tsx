@@ -144,7 +144,7 @@ export function PasswordForm(props: {
 
 // ---------- 2FA ----------
 
-export function TotpForm(props: { onDone: () => void }) {
+export function TotpForm(props: { onDone: () => void; run: (action: () => Promise<void>) => Promise<void> }) {
   const [scan, setScan] = useState<{ issuer: string; account: string } | null>(null);
   const [secret, setSecret] = useState("");
   const [name, setName] = useState("");
@@ -179,11 +179,18 @@ export function TotpForm(props: { onDone: () => void }) {
   const canSave = name.trim() !== "" && (scan !== null || secret.trim() !== "");
   const save = async () => {
     if (!canSave) return;
+    const entry = { name, account: scan ? scan.account : account, secret: scan ? null : secret };
     try {
-      await vault.addTotp({ name, account: scan ? scan.account : account, secret: scan ? null : secret });
+      await vault.addTotp(entry);
       props.onDone();
     } catch (e) {
-      setError(errorText(vaultError(e)));
+      // With Windows Hello, adding needs an unlock: the view asks and retries.
+      if (vaultError(e) === "locked")
+        await props.run(async () => {
+          await vault.addTotp(entry);
+          props.onDone();
+        });
+      else setError(errorText(vaultError(e)));
     }
   };
 

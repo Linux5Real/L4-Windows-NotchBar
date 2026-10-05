@@ -17,6 +17,12 @@ export function errorText(code: string): string {
       return t("Erst QR-Code einfügen oder Schlüssel eingeben");
     case "clipboard":
       return t("Zwischenablage belegt, nochmal versuchen");
+    case "hello-cancel":
+      return t("Abgebrochen");
+    case "hello-failed":
+      return t("Windows Hello hat nicht geklappt");
+    case "hello-missing":
+      return t("Windows-Hello-Schlüssel fehlt");
     case "unreadable":
       return t("Tresor nicht lesbar");
     default:

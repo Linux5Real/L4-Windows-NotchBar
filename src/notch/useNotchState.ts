@@ -79,7 +79,8 @@ export function useNotchState() {
   }, [setStatus]);
 
   const dismiss = useCallback(() => {
-    if (pinned.get()) return;
+    // Held (dragging, Windows Hello dialog in front) counts like pinned.
+    if (pinned.get() || holds.get() > 0) return;
     window.clearTimeout(timer.current);
     setStatus("closed");
   }, [setStatus]);

@@ -11,12 +11,22 @@
 //!   Rust (only the 6-digit codes do). Only "show password" returns a password.
 //! - Copies are marked so clipboard histories (ours, Win+V, cloud) skip them, and
 //!   passwords/codes are cleared from the clipboard after 30 s.
+//! - Optional Windows Hello (setting, off by default): the secrets are additionally
+//!   sealed with AES-256-GCM. The key is SHA-256 of a Windows Hello signature over a
+//!   random challenge (RSA PKCS#1 v1.5 is deterministic, so the same key comes back
+//!   every time). The private key lives in the TPM and signs only after Hello
+//!   (face, finger, Windows PIN), so even code running as the user can't read the
+//!   secrets without that confirmation. Names and usernames stay readable for the list.
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+use aes_gcm::aead::{Aead, AeadCore, KeyInit, OsRng};
+use aes_gcm::{Aes256Gcm, Nonce};
+use base64::Engine;
 use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, State};
@@ -76,7 +86,15 @@ impl Default for Otp {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
+struct Hello {
+    /// Base64 random challenge that Windows Hello signs.
+    challenge: String,
+    /// Base64 nonce + AES-GCM ciphertext of {id: secret}.
+    sealed: String,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
 struct Data {
     pin: Option<String>,
     pin_passwords: bool,
@@ -85,11 +103,16 @@ struct Data {
     /// Unix seconds; until then no PIN is accepted.
     locked_until: u64,
     items: Vec<Item>,
+    #[serde(default)]
+    hello: Option<Hello>,
+    /// Hello key while the secrets are opened (never written).
+    #[serde(skip)]
+    key: Option<[u8; 32]>,
 }
 
 impl Default for Data {
     fn default() -> Self {
-        Self { pin: None, pin_passwords: true, pin_totp: true, fails: 0, locked_until: 0, items: Vec::new() }
+        Self { pin: None, pin_passwords: true, pin_totp: true, fails: 0, locked_until: 0, items: Vec::new(), hello: None, key: None }
     }
 }
 
@@ -105,6 +128,8 @@ pub struct VaultState {
     lock: Mutex<()>,
     unlocked_until: Mutex<Option<Instant>>,
     pending: Mutex<Option<Pending>>,
+    /// Windows Hello key, only while unlocked.
+    hello_key: Mutex<Option<[u8; 32]>>,
 }
 
 // ---------- File + DPAPI ----------
@@ -150,10 +175,41 @@ fn load(app: &AppHandle) -> Result<Data, String> {
     serde_json::from_slice(&plain).map_err(|_| "unreadable".to_string())
 }
 
+/// Like `load`, but with the secrets: with Windows Hello on this needs the key
+/// from an unlock ("locked" otherwise). Every command that reads or writes a
+/// secret uses this, so `save` can reseal everything.
+fn load_full(app: &AppHandle, state: &VaultState) -> Result<Data, String> {
+    let mut data = load(app)?;
+    let Some(hello) = &data.hello else { return Ok(data) };
+    if !is_unlocked(state) {
+        return Err("locked".into());
+    }
+    let key = state.hello_key.lock().unwrap().ok_or("locked")?;
+    let secrets = open_sealed(&key, &hello.sealed)?;
+    for item in &mut data.items {
+        if let Some(secret) = secrets.get(&item.id) {
+            item.secret = secret.clone();
+        }
+    }
+    data.key = Some(key);
+    Ok(data)
+}
+
 /// Atomic: temp file, then rename, so a crash never leaves half a vault.
+/// With Windows Hello the secrets are resealed (if opened) and never written in the clear.
 fn save(app: &AppHandle, data: &Data) -> Result<(), String> {
     let path = path(app)?;
-    let plain = serde_json::to_vec(data).map_err(|e| e.to_string())?;
+    let mut out = data.clone();
+    if let (Some(hello), Some(key)) = (out.hello.as_mut(), data.key) {
+        let secrets: HashMap<&str, &str> = data.items.iter().map(|i| (i.id.as_str(), i.secret.as_str())).collect();
+        hello.sealed = seal(&key, &serde_json::to_vec(&secrets).map_err(|e| e.to_string())?)?;
+    }
+    if out.hello.is_some() {
+        for item in &mut out.items {
+            item.secret.clear();
+        }
+    }
+    let plain = serde_json::to_vec(&out).map_err(|e| e.to_string())?;
     let cipher = protect(&plain)?;
     let tmp = path.with_extension("tmp");
     std::fs::write(&tmp, cipher).map_err(|e| e.to_string())?;
@@ -176,6 +232,7 @@ fn is_unlocked(state: &VaultState) -> bool {
         }
         _ => {
             *until = None;
+            *state.hello_key.lock().unwrap() = None;
             false
         }
     }
@@ -220,6 +277,8 @@ pub struct Status {
     locked_for: u64,
     /// The file exists but can't be decrypted (other Windows user, damaged).
     unreadable: bool,
+    /// Windows Hello unlocks instead of the PIN.
+    hello: bool,
     items: Vec<ItemInfo>,
 }
 
@@ -235,13 +294,14 @@ pub fn vault_status(app: AppHandle, state: State<'_, VaultState>) -> Status {
             pin_totp: data.pin_totp,
             locked_for: data.locked_until.saturating_sub(now_secs()),
             unreadable: false,
+            hello: data.hello.is_some(),
             items: data
                 .items
                 .iter()
                 .map(|i| ItemInfo { id: i.id.clone(), kind: i.kind, name: i.name.clone(), username: i.username.clone(), period: i.otp.period })
                 .collect(),
         },
-        Err(_) => Status { has_pin: false, unlocked: false, pin_passwords: true, pin_totp: true, locked_for: 0, unreadable: true, items: Vec::new() },
+        Err(_) => Status { has_pin: false, unlocked: false, pin_passwords: true, pin_totp: true, locked_for: 0, unreadable: true, hello: false, items: Vec::new() },
     }
 }
 
@@ -267,6 +327,9 @@ pub fn vault_setup(pin: String, app: AppHandle, state: State<'_, VaultState>) ->
 pub fn vault_unlock(pin: String, app: AppHandle, state: State<'_, VaultState>) -> Result<(), String> {
     let _guard = state.lock.lock().unwrap();
     let mut data = load(&app)?;
+    if data.hello.is_some() {
+        return Err("hello".into());
+    }
     let now = now_secs();
     if data.locked_until > now {
         return Err(format!("lockout:{}", data.locked_until - now));
@@ -297,6 +360,7 @@ pub fn vault_unlock(pin: String, app: AppHandle, state: State<'_, VaultState>) -
 pub fn vault_lock(state: State<'_, VaultState>) {
     *state.unlocked_until.lock().unwrap() = None;
     *state.pending.lock().unwrap() = None;
+    *state.hello_key.lock().unwrap() = None;
 }
 
 /// New (id = None) or edited password. Editing needs the PIN when passwords are protected.
@@ -310,7 +374,7 @@ pub fn vault_save_password(
     state: State<'_, VaultState>,
 ) -> Result<(), String> {
     let _guard = state.lock.lock().unwrap();
-    let mut data = load(&app)?;
+    let mut data = load_full(&app, &state)?;
     if data.pin.is_none() {
         return Err("no-pin".into());
     }
@@ -354,6 +418,7 @@ pub fn vault_add_totp(
     if name.is_empty() {
         return Err("missing".into());
     }
+    let mut data = load_full(&app, &state)?;
     let (secret, otp, label_account) = match secret {
         Some(text) => parse_input(&text)?,
         None => {
@@ -361,7 +426,6 @@ pub fn vault_add_totp(
             (pending.secret, pending.otp, String::new())
         }
     };
-    let mut data = load(&app)?;
     if data.pin.is_none() {
         return Err("no-pin".into());
     }
@@ -375,7 +439,7 @@ pub fn vault_add_totp(
 pub fn vault_delete(id: String, app: AppHandle, state: State<'_, VaultState>) -> Result<(), String> {
     let _guard = state.lock.lock().unwrap();
     require(&state, true)?;
-    let mut data = load(&app)?;
+    let mut data = load_full(&app, &state)?;
     data.items.retain(|i| i.id != id);
     save(&app, &data)
 }
@@ -384,7 +448,7 @@ pub fn vault_delete(id: String, app: AppHandle, state: State<'_, VaultState>) ->
 #[tauri::command]
 pub fn vault_reveal(id: String, app: AppHandle, state: State<'_, VaultState>) -> Result<String, String> {
     let _guard = state.lock.lock().unwrap();
-    let data = load(&app)?;
+    let data = load_full(&app, &state)?;
     require(&state, data.pin_passwords)?;
     let item = data.items.into_iter().find(|i| i.id == id && i.kind == Kind::Password).ok_or("not-found")?;
     Ok(item.secret)
@@ -394,7 +458,7 @@ pub fn vault_reveal(id: String, app: AppHandle, state: State<'_, VaultState>) ->
 #[tauri::command]
 pub fn vault_copy(id: String, field: String, app: AppHandle, state: State<'_, VaultState>) -> Result<(), String> {
     let _guard = state.lock.lock().unwrap();
-    let data = load(&app)?;
+    let data = if field == "username" { load(&app)? } else { load_full(&app, &state)? };
     let item = data.items.iter().find(|i| i.id == id).ok_or("not-found")?;
     let (text, clear) = match (field.as_str(), item.kind) {
         ("username", _) => (item.username.clone(), false),
@@ -427,7 +491,7 @@ pub struct Code {
 #[tauri::command]
 pub fn vault_codes(app: AppHandle, state: State<'_, VaultState>) -> Result<Vec<Code>, String> {
     let _guard = state.lock.lock().unwrap();
-    let data = load(&app)?;
+    let data = load_full(&app, &state)?;
     require(&state, data.pin_totp)?;
     let now = now_secs();
     data.items
@@ -470,6 +534,8 @@ pub fn vault_reset(app: AppHandle, state: State<'_, VaultState>) -> Result<(), S
     let _guard = state.lock.lock().unwrap();
     *state.unlocked_until.lock().unwrap() = None;
     *state.pending.lock().unwrap() = None;
+    *state.hello_key.lock().unwrap() = None;
+    thread::spawn(hello::delete);
     let path = path(&app)?;
     if path.exists() {
         std::fs::remove_file(path).map_err(|e| e.to_string())?;
@@ -491,6 +557,163 @@ pub async fn vault_scan(state: State<'_, VaultState>) -> Result<Scan, String> {
     let (secret, otp, issuer, account) = parse_otpauth(&text).ok_or("not-otp")?;
     *state.pending.lock().unwrap() = Some(Pending { secret, otp });
     Ok(Scan { issuer, account })
+}
+
+// ---------- Windows Hello ----------
+
+#[tauri::command]
+pub async fn vault_hello_supported() -> bool {
+    tauri::async_runtime::spawn_blocking(hello::supported).await.unwrap_or(false)
+}
+
+/// Shows the Windows Hello prompt; on success the vault is unlocked with the key.
+/// Errors: "hello-cancel", "hello-missing" (credential gone), "hello-failed".
+#[tauri::command]
+pub async fn vault_hello_unlock(app: AppHandle, state: State<'_, VaultState>) -> Result<(), String> {
+    let challenge = {
+        let _guard = state.lock.lock().unwrap();
+        let hello = load(&app)?.hello.ok_or("no-hello")?;
+        b64(&hello.challenge)?
+    };
+    let key = tauri::async_runtime::spawn_blocking(move || hello::derive_key(false, &challenge))
+        .await
+        .map_err(|e| e.to_string())??;
+    let _guard = state.lock.lock().unwrap();
+    let hello = load(&app)?.hello.ok_or("no-hello")?;
+    // GCM authenticates: a wrong key can't open the seal.
+    open_sealed(&key, &hello.sealed).map_err(|_| "hello-failed".to_string())?;
+    *state.hello_key.lock().unwrap() = Some(key);
+    *state.unlocked_until.lock().unwrap() = Some(Instant::now() + UNLOCK_IDLE);
+    Ok(())
+}
+
+/// Turns Windows Hello on. Needs the PIN unlock first; creates the TPM key (prompt).
+#[tauri::command]
+pub async fn vault_hello_enable(app: AppHandle, state: State<'_, VaultState>) -> Result<(), String> {
+    {
+        let _guard = state.lock.lock().unwrap();
+        let data = load(&app)?;
+        if data.hello.is_some() {
+            return Ok(());
+        }
+        if data.pin.is_none() {
+            return Err("no-pin".into());
+        }
+        require(&state, true)?;
+    }
+    let challenge = Aes256Gcm::generate_key(&mut OsRng).to_vec();
+    let sign = challenge.clone();
+    let key = tauri::async_runtime::spawn_blocking(move || hello::derive_key(true, &sign))
+        .await
+        .map_err(|e| e.to_string())??;
+    let _guard = state.lock.lock().unwrap();
+    let mut data = load(&app)?;
+    data.hello = Some(Hello { challenge: base64::engine::general_purpose::STANDARD.encode(&challenge), sealed: String::new() });
+    data.key = Some(key);
+    save(&app, &data)?;
+    *state.hello_key.lock().unwrap() = Some(key);
+    *state.unlocked_until.lock().unwrap() = Some(Instant::now() + UNLOCK_IDLE);
+    Ok(())
+}
+
+/// Turns Windows Hello off: needs a Hello unlock; the secrets go back under DPAPI only.
+#[tauri::command]
+pub async fn vault_hello_disable(app: AppHandle, state: State<'_, VaultState>) -> Result<(), String> {
+    {
+        let _guard = state.lock.lock().unwrap();
+        let mut data = load_full(&app, &state)?;
+        if data.hello.is_none() {
+            return Ok(());
+        }
+        data.hello = None;
+        data.key = None;
+        save(&app, &data)?;
+        *state.hello_key.lock().unwrap() = None;
+    }
+    let _ = tauri::async_runtime::spawn_blocking(hello::delete).await;
+    Ok(())
+}
+
+fn b64(s: &str) -> Result<Vec<u8>, String> {
+    base64::engine::general_purpose::STANDARD.decode(s).map_err(|_| "unreadable".to_string())
+}
+
+fn seal(key: &[u8; 32], plain: &[u8]) -> Result<String, String> {
+    let cipher = Aes256Gcm::new(key.into());
+    let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
+    let mut out = nonce.to_vec();
+    out.extend(cipher.encrypt(&nonce, plain).map_err(|_| "seal".to_string())?);
+    Ok(base64::engine::general_purpose::STANDARD.encode(out))
+}
+
+fn open_sealed(key: &[u8; 32], sealed: &str) -> Result<HashMap<String, String>, String> {
+    if sealed.is_empty() {
+        return Ok(HashMap::new());
+    }
+    let bytes = b64(sealed)?;
+    if bytes.len() < 12 {
+        return Err("unreadable".into());
+    }
+    let (nonce, body) = bytes.split_at(12);
+    let plain = Aes256Gcm::new(key.into())
+        .decrypt(Nonce::from_slice(nonce), body)
+        .map_err(|_| "unreadable".to_string())?;
+    serde_json::from_slice(&plain).map_err(|_| "unreadable".to_string())
+}
+
+mod hello {
+    use sha2::{Digest, Sha256};
+    use windows::core::HSTRING;
+    use windows::Security::Credentials::{KeyCredentialCreationOption, KeyCredentialManager, KeyCredentialStatus};
+    use windows::Security::Cryptography::CryptographicBuffer;
+    use windows::Win32::System::Com::{CoInitializeEx, COINIT_MULTITHREADED};
+
+    const NAME: &str = "L4-Notchbar Vault";
+
+    fn init() {
+        let _ = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) };
+    }
+
+    pub fn supported() -> bool {
+        init();
+        KeyCredentialManager::IsSupportedAsync().and_then(|op| op.join()).unwrap_or(false)
+    }
+
+    fn status(s: KeyCredentialStatus) -> Result<(), String> {
+        match s {
+            KeyCredentialStatus::Success => Ok(()),
+            KeyCredentialStatus::UserCanceled => Err("hello-cancel".into()),
+            KeyCredentialStatus::NotFound => Err("hello-missing".into()),
+            _ => Err("hello-failed".into()),
+        }
+    }
+
+    /// Signs the challenge with the Hello key (prompt) → SHA-256 = AES key.
+    /// `create`: make a new key first (turning Hello on).
+    pub fn derive_key(create: bool, challenge: &[u8]) -> Result<[u8; 32], String> {
+        init();
+        let fail = |_: windows::core::Error| "hello-failed".to_string();
+        let name = HSTRING::from(NAME);
+        let result = if create {
+            KeyCredentialManager::RequestCreateAsync(&name, KeyCredentialCreationOption::ReplaceExisting).and_then(|op| op.join())
+        } else {
+            KeyCredentialManager::OpenAsync(&name).and_then(|op| op.join())
+        }
+        .map_err(fail)?;
+        status(result.Status().map_err(fail)?)?;
+        let credential = result.Credential().map_err(fail)?;
+        let data = CryptographicBuffer::CreateFromByteArray(challenge).map_err(fail)?;
+        let signed = credential.RequestSignAsync(&data).and_then(|op| op.join()).map_err(fail)?;
+        status(signed.Status().map_err(fail)?)?;
+        let mut bytes = windows::core::Array::<u8>::new();
+        CryptographicBuffer::CopyToByteArray(&signed.Result().map_err(fail)?, &mut bytes).map_err(fail)?;
+        Ok(Sha256::digest(bytes.as_slice()).into())
+    }
+
+    pub fn delete() {
+        init();
+        let _ = KeyCredentialManager::DeleteAsync(&HSTRING::from(NAME)).and_then(|op| op.join());
+    }
 }
 
 fn new_id() -> String {
@@ -726,6 +949,15 @@ mod tests {
         assert_eq!(totp(&item(sha256, "SHA256", 8), 59).unwrap(), "46119246");
         let sha512 = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNA";
         assert_eq!(totp(&item(sha512, "SHA512", 8), 59).unwrap(), "90693936");
+    }
+
+    #[test]
+    fn hello_seal() {
+        let key = [7u8; 32];
+        let sealed = seal(&key, br#"{"a":"secret"}"#).unwrap();
+        assert_eq!(open_sealed(&key, &sealed).unwrap()["a"], "secret");
+        assert!(open_sealed(&[8u8; 32], &sealed).is_err());
+        assert!(open_sealed(&key, "").unwrap().is_empty());
     }
 
     #[test]

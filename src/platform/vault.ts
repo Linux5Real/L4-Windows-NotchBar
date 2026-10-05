@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { createStore } from "../lib/store";
-import { isNative } from "./native";
+import { isNative, keyboardFocus } from "./native";
+import { holdOpen } from "../notch/useNotchState";
 import { showcase } from "../dev/showcase-data";
 
 /*
@@ -29,6 +30,8 @@ export interface VaultStatus {
   pinTotp: boolean;
   lockedFor: number;
   unreadable: boolean;
+  /** Windows Hello unlocks instead of the PIN (and seals the secrets). */
+  hello: boolean;
   items: VaultItem[];
 }
 
@@ -68,7 +71,35 @@ export const vault = {
   changePin: (pin: string) => call<void>("vault_change_pin", { pin }),
   reset: () => call<void>("vault_reset"),
   scan: () => call<{ issuer: string; account: string }>("vault_scan", {}, false),
+  helloSupported: () => call<boolean>("vault_hello_supported", {}, false),
+  helloUnlock: () => withHello(() => call<void>("vault_hello_unlock")),
+  helloEnable: () => withHello(() => call<void>("vault_hello_enable")),
+  helloDisable: () => withHello(() => call<void>("vault_hello_disable")),
 };
+
+/*
+ * The Windows Hello dialog takes the focus. Hold the notch open meanwhile, or
+ * focus loss would close it (and closing locks the vault again). After the
+ * dialog the hold ends with the next mouse move over the notch, at the latest
+ * after 15 s, so the notch doesn't fold away while the cursor is still on the dialog.
+ */
+async function withHello<T>(action: () => Promise<T>): Promise<T> {
+  holdOpen(true);
+  let released = false;
+  const release = () => {
+    if (released) return;
+    released = true;
+    window.removeEventListener("pointermove", release);
+    holdOpen(false);
+  };
+  try {
+    return await action();
+  } finally {
+    keyboardFocus(true);
+    window.addEventListener("pointermove", release);
+    window.setTimeout(release, 15_000);
+  }
+}
 
 /** Error text from a rejected call (Tauri rejects with the plain string). */
 export function vaultError(e: unknown): string {
@@ -89,6 +120,7 @@ const mock = (() => {
   let fails = 0;
   let lockedUntil = 0;
   let pending: { issuer: string; account: string } | null = null;
+  let hello = false;
   let items: MockItem[] = showcase
     ? [
         { id: "p1", kind: "password", name: "GitHub", username: "linus@hey.com", secret: "vR7#kq2Lw9!mZt4x", period: 30 },
@@ -122,6 +154,7 @@ const mock = (() => {
       pinTotp,
       lockedFor: Math.max(0, lockedUntil - now()),
       unreadable: false,
+      hello,
       items: items.map(({ secret: _, ...i }) => i),
     }),
     async call<T>(cmd: string, a: Record<string, unknown>): Promise<T> {
@@ -133,7 +166,23 @@ const mock = (() => {
           pin = s("pin");
           unlocked = true;
           break;
+        case "vault_hello_supported":
+          return true as T;
+        case "vault_hello_unlock":
+          await new Promise((r) => setTimeout(r, 700));
+          unlocked = true;
+          break;
+        case "vault_hello_enable":
+          need(true);
+          await new Promise((r) => setTimeout(r, 700));
+          hello = true;
+          break;
+        case "vault_hello_disable":
+          need(true);
+          hello = false;
+          break;
         case "vault_unlock":
+          if (hello) throw "hello";
           if (lockedUntil > now()) throw `lockout:${lockedUntil - now()}`;
           if (s("pin") === pin) {
             fails = 0;
@@ -199,6 +248,7 @@ const mock = (() => {
           pin = s("pin");
           break;
         case "vault_reset":
+          hello = false;
           pin = null;
           unlocked = false;
           items = [];

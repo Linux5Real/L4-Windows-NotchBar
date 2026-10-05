@@ -6,6 +6,7 @@ import { refreshVault, vault, vaultError, vaultStatus } from "../../platform/vau
 import { updateSettings } from "../../settings/store";
 import { Button, Group, Row, Switch } from "../../ui/controls";
 import { PinEntry, unlockResult } from "./PinEntry";
+import { HelloPrompt } from "./HelloPrompt";
 import { errorText } from "./errors";
 import { t } from "../../i18n";
 
@@ -20,9 +21,11 @@ export function VaultSettings() {
   const [flow, setFlow] = useState<Flow>(null);
   const [confirmReset, setConfirmReset] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [helloSupported, setHelloSupported] = useState(false);
 
   useEffect(() => {
     void refreshVault();
+    void vault.helloSupported().then(setHelloSupported, () => setHelloSupported(false));
     return () => void vault.lock();
   }, []);
 
@@ -61,7 +64,18 @@ export function VaultSettings() {
   }
 
   const pinFlow =
-    flow?.step === "unlock" ? (
+    flow?.step === "unlock" && status.hello ? (
+      <HelloPrompt
+        key="hello"
+        compact
+        onCancel={() => setFlow(null)}
+        onUnlocked={async () => {
+          const then = flow.then;
+          setFlow(null);
+          await run(then);
+        }}
+      />
+    ) : flow?.step === "unlock" ? (
       <PinEntry
         key="unlock"
         compact
@@ -102,16 +116,32 @@ export function VaultSettings() {
 
   return (
     <Group title={t("Tresor")} id="settings-vault">
-      <Row label={t("PIN für Passwörter")} hint={t("Vor Anzeigen und Kopieren")}>
-        <Switch label={t("PIN für Passwörter")} checked={status.pinPasswords} onChange={(on) => void run(() => vault.options(on, status.pinTotp))} />
-      </Row>
-      <Row label={t("PIN für 2FA-Codes")} hint={t("Vor Anzeigen und Kopieren")}>
-        <Switch label={t("PIN für 2FA-Codes")} checked={status.pinTotp} onChange={(on) => void run(() => vault.options(status.pinPasswords, on))} />
-      </Row>
-      <Row label={t("PIN ändern")} hint={notice ?? undefined}>
-        <Button onClick={() => setFlow({ step: "unlock", then: async () => setFlow({ step: "new" }) })}>{t("Ändern")}</Button>
-      </Row>
-      <Row label={t("Tresor zurücksetzen")} hint={t("PIN vergessen? Löscht alle Einträge.")}>
+      {helloSupported && (
+        <Row
+          label={t("Windows Hello")}
+          hint={
+            status.hello
+              ? t("Ersetzt den PIN. Wird Windows Hello zurückgesetzt, sind die Einträge verloren.")
+              : t("Gesicht, Finger oder Windows-PIN statt des eigenen PINs")
+          }
+        >
+          <Switch label={t("Windows Hello")} checked={status.hello} onChange={(on) => void run(() => (on ? vault.helloEnable() : vault.helloDisable()))} />
+        </Row>
+      )}
+      {!status.hello && (
+        <>
+          <Row label={t("PIN für Passwörter")} hint={t("Vor Anzeigen und Kopieren")}>
+            <Switch label={t("PIN für Passwörter")} checked={status.pinPasswords} onChange={(on) => void run(() => vault.options(on, status.pinTotp))} />
+          </Row>
+          <Row label={t("PIN für 2FA-Codes")} hint={t("Vor Anzeigen und Kopieren")}>
+            <Switch label={t("PIN für 2FA-Codes")} checked={status.pinTotp} onChange={(on) => void run(() => vault.options(status.pinPasswords, on))} />
+          </Row>
+          <Row label={t("PIN ändern")} hint={notice ?? undefined}>
+            <Button onClick={() => setFlow({ step: "unlock", then: async () => setFlow({ step: "new" }) })}>{t("Ändern")}</Button>
+          </Row>
+        </>
+      )}
+      <Row label={t("Tresor zurücksetzen")} hint={status.hello ? t("Löscht alle Einträge.") : t("PIN vergessen? Löscht alle Einträge.")}>
         <Button onClick={() => (confirmReset ? void vault.reset().then(refreshVault) : setConfirmReset(true))}>
           <span className={confirmReset ? "text-red" : undefined}>{confirmReset ? t("Wirklich alles löschen?") : t("Zurücksetzen")}</span>
         </Button>

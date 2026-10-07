@@ -106,5 +106,6 @@ export function createNativeMedia(): MediaSource {
       optimistic({ position });
       control("seek", position);
     },
+    openSource: () => invoke<boolean>("media_open_source").catch(() => false),
   };
 }

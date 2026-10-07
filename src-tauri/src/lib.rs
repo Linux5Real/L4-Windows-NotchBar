@@ -10,6 +10,7 @@ mod drop;
 mod fps;
 mod hit_test;
 mod media;
+mod mixer;
 mod privacy;
 pub mod secrets;
 mod system;
@@ -57,6 +58,7 @@ pub fn run() {
         )
         .manage(hit_test::HitState::default())
         .manage(media::MediaState::default())
+        .manage(mixer::MixerState::default())
         .manage(clipboard::ClipboardState::default())
         .manage(FocusState::default())
         .manage(TrayItems::default())
@@ -102,6 +104,10 @@ pub fn run() {
             fps::fps_unlock,
             controls::volume_get,
             controls::volume_set,
+            mixer::mixer_list,
+            mixer::mixer_set,
+            mixer::media_open_source,
+            tray_focus,
             controls::focus_get,
             controls::focus_set,
             privacy::privacy_state,
@@ -201,28 +207,45 @@ fn enable_autostart_once(app: &AppHandle) {
     }
 }
 
-/// Tray items whose text changes with the language.
-#[derive(Default)]
-struct TrayItems(Mutex<Option<(MenuItem<tauri::Wry>, MenuItem<tauri::Wry>, CheckMenuItem<tauri::Wry>, MenuItem<tauri::Wry>)>>);
+/// Tray items whose text or check state changes at runtime.
+struct Tray {
+    open: MenuItem<tauri::Wry>,
+    settings: MenuItem<tauri::Wry>,
+    focus: CheckMenuItem<tauri::Wry>,
+    autostart: CheckMenuItem<tauri::Wry>,
+    quit: MenuItem<tauri::Wry>,
+}
 
-/// Open (shortcut right-aligned via tab, like Windows menus), settings, autostart, quit.
-fn tray_texts(lang: &str) -> [String; 4] {
+#[derive(Default)]
+struct TrayItems(Mutex<Option<Tray>>);
+
+/// Open (shortcut right-aligned via tab, like Windows menus), settings, focus mode, autostart, quit.
+fn tray_texts(lang: &str) -> [String; 5] {
     if lang == "en" {
         let keys = SHORTCUT_LABEL.replace("Strg", "Ctrl").replace("Leertaste", "Space");
-        [format!("Open L4-Notchbar\t{keys}"),"Settings …".into(), "Start with Windows".into(), "Quit L4-Notchbar".into()]
+        [format!("Open L4-Notchbar\t{keys}"), "Settings …".into(), "Focus mode".into(), "Start with Windows".into(), "Quit L4-Notchbar".into()]
     } else {
-        [format!("L4-Notchbar öffnen\t{SHORTCUT_LABEL}"),"Einstellungen …".into(), "Mit Windows starten".into(), "L4-Notchbar beenden".into()]
+        [format!("L4-Notchbar öffnen\t{SHORTCUT_LABEL}"), "Einstellungen …".into(), "Fokus-Modus".into(), "Mit Windows starten".into(), "L4-Notchbar beenden".into()]
     }
 }
 
 #[tauri::command]
 fn set_language(lang: String, state: State<'_, TrayItems>) {
-    if let Some((open, settings, autostart, quit)) = state.0.lock().unwrap().as_ref() {
-        let [a, b, c, d] = tray_texts(&lang);
-        let _ = open.set_text(a);
-        let _ = settings.set_text(b);
-        let _ = autostart.set_text(c);
-        let _ = quit.set_text(d);
+    if let Some(tray) = state.0.lock().unwrap().as_ref() {
+        let [a, b, c, d, e] = tray_texts(&lang);
+        let _ = tray.open.set_text(a);
+        let _ = tray.settings.set_text(b);
+        let _ = tray.focus.set_text(c);
+        let _ = tray.autostart.set_text(d);
+        let _ = tray.quit.set_text(e);
+    }
+}
+
+/// The frontend owns focus mode; the tray check only mirrors it.
+#[tauri::command]
+fn tray_focus(on: bool, state: State<'_, TrayItems>) {
+    if let Some(tray) = state.0.lock().unwrap().as_ref() {
+        let _ = tray.focus.set_checked(on);
     }
 }
 
@@ -251,18 +274,27 @@ fn dark_menus() {
 fn build_tray(app: &App) -> tauri::Result<()> {
     dark_menus();
     let enabled = app.autolaunch().is_enabled().unwrap_or(false);
-    let [open_text, settings_text, autostart_text, quit_text] = tray_texts("de");
+    let [open_text, settings_text, focus_text, autostart_text, quit_text] = tray_texts("de");
     let open = MenuItem::with_id(app, "open", open_text, true, None::<&str>)?;
     let settings = MenuItem::with_id(app, "settings", settings_text, true, None::<&str>)?;
+    // The real state follows right after start (the frontend calls tray_focus).
+    let focus = CheckMenuItem::with_id(app, "focus", focus_text, true, false, None::<&str>)?;
     let autostart = CheckMenuItem::with_id(app, "autostart", autostart_text, true, enabled, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", quit_text, true, None::<&str>)?;
-    *app.state::<TrayItems>().0.lock().unwrap() = Some((open.clone(), settings.clone(), autostart.clone(), quit.clone()));
+    *app.state::<TrayItems>().0.lock().unwrap() = Some(Tray {
+        open: open.clone(),
+        settings: settings.clone(),
+        focus: focus.clone(),
+        autostart: autostart.clone(),
+        quit: quit.clone(),
+    });
     let menu = Menu::with_items(
         app,
-        &[&open, &settings, &PredefinedMenuItem::separator(app)?, &autostart, &PredefinedMenuItem::separator(app)?, &quit],
+        &[&open, &settings, &PredefinedMenuItem::separator(app)?, &focus, &autostart, &PredefinedMenuItem::separator(app)?, &quit],
     )?;
 
     let autostart_item = autostart.clone();
+    let focus_item = focus.clone();
     TrayIconBuilder::new()
         .icon(app.default_window_icon().unwrap().clone())
         .tooltip("L4-Notchbar")
@@ -281,6 +313,11 @@ fn build_tray(app: &App) -> tauri::Result<()> {
                 let _ = app.emit("notch://open", Some("settings"));
             }
             "quit" => app.exit(0),
+            "focus" => {
+                // The click already toggled the check; the frontend applies it and mirrors it back.
+                let on = focus_item.is_checked().unwrap_or(false);
+                let _ = app.emit("notch://focus-set", on);
+            }
             "autostart" => {
                 // The check item toggles itself on click; read the new state.
                 let on = autostart_item.is_checked().unwrap_or(false);

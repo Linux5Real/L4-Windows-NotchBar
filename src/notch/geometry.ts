@@ -32,6 +32,8 @@ export const geometry = {
   live: { w: 284, h: 30, r: 10, ear: 6 },
   /** Gaming mode: wider slots for FPS/CPU on the left and GPU/RAM on the right. */
   gaming: { w: 436, h: 30, r: 10, ear: 6 },
+  /** Focus mode "line": a thin strip at the screen edge, just enough to find it again. */
+  line: { w: 150, h: 5, r: 2.5, ear: 3 },
 } satisfies Record<string, NotchGeometry>;
 
 /** Open state: size comes from the active tab, radii are fixed. */

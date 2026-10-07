@@ -26,7 +26,8 @@ import { HeaderActions, HeaderButton } from "../../notch/header";
 import { MAX_SIZE, requestSize } from "../../notch/size";
 import { findTab } from "../../notch/tabs";
 import { clipboard, useClipboard, type ClipItem, type ClipPreview } from "../../platform/clipboard";
-import { Segmented } from "../../ui/controls";
+import { Redacted, Segmented } from "../../ui/controls";
+import { usePresenting } from "../privacy/store";
 import { t } from "../../i18n";
 
 const kindIcon: Record<ClipItem["kind"], Icon> = {
@@ -66,12 +67,13 @@ export function ClipboardView() {
   const [filter, setFilter] = useState<Filter>("all");
   const [previewId, setPreviewId] = useState<number | null>(null);
   const items = filter === "all" ? all : all.filter((i) => i.kind === filter || (filter === "image" && !!i.thumbnail));
-  const preview = usePreview(previewId);
+  const hidden = usePresenting();
+  const preview = usePreview(hidden ? null : previewId);
 
-  // Drop the preview when its entry disappears.
+  // Drop the preview when its entry disappears or the presentation mode starts.
   useEffect(() => {
-    if (previewId !== null && !all.some((i) => i.id === previewId)) setPreviewId(null);
-  }, [all, previewId]);
+    if (previewId !== null && (hidden || !all.some((i) => i.id === previewId))) setPreviewId(null);
+  }, [all, previewId, hidden]);
 
   // Vertical wheel → horizontal scroll.
   useEffect(() => {
@@ -137,12 +139,13 @@ export function ClipboardView() {
               <Card
                 item={item}
                 now={now}
+                hidden={hidden}
                 copied={copied === item.id}
                 selected={previewId === item.id}
-                onClick={() => (item.thumbnail ? setPreviewId((p) => (p === item.id ? null : item.id)) : void copy(item.id))}
+                onClick={() => (item.thumbnail && !hidden ? setPreviewId((p) => (p === item.id ? null : item.id)) : void copy(item.id))}
               />
               <div className="absolute top-2 right-2 flex gap-1 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
-                {item.thumbnail && <CardButton label={t("Kopieren")} icon={Copy} onClick={() => void copy(item.id)} />}
+                {item.thumbnail && !hidden && <CardButton label={t("Kopieren")} icon={Copy} onClick={() => void copy(item.id)} />}
                 <CardButton label={t("Entfernen")} icon={X} onClick={() => clipboard.remove(item.id)} />
               </div>
             </motion.div>
@@ -241,16 +244,16 @@ function PreviewPane({ preview, onCopy, onClose }: { preview: LoadedPreview; onC
   );
 }
 
-function Card(props: { item: ClipItem; now: number; copied: boolean; selected: boolean; onClick: () => void }) {
-  const { item, now, copied } = props;
+function Card(props: { item: ClipItem; now: number; hidden: boolean; copied: boolean; selected: boolean; onClick: () => void }) {
+  const { item, now, copied, hidden } = props;
   const KindIcon = kindIcon[item.kind];
-  // Images and copied image files fill the card.
-  const isImage = !!item.thumbnail;
+  // Images and copied image files fill the card (not in presentation mode).
+  const isImage = !!item.thumbnail && !hidden;
 
   return (
     <button
       onClick={props.onClick}
-      title={isImage ? t("Vorschau") : item.text}
+      title={hidden ? t("Ausgeblendet") : isImage ? t("Vorschau") : item.text}
       className={`pressable pressable-fill relative flex size-full flex-col justify-between overflow-hidden rounded-[14px] bg-fill-1 p-3 text-left ${
         props.selected ? "ring-2 ring-label ring-inset" : ""
       }`}
@@ -270,7 +273,7 @@ function Card(props: { item: ClipItem; now: number; copied: boolean; selected: b
         </span>
       </div>
 
-      <Body item={item} />
+      {hidden ? <Redacted lines={3} className="relative" /> : <Body item={item} />}
 
       <AnimatePresence>
         {copied && (

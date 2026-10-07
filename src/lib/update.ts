@@ -1,6 +1,6 @@
 import { createStore } from "./store";
 import { settings } from "../settings/store";
-import { updater, type UpdateHandle } from "../platform/services";
+import { fetchChangelog, updater, type ChangelogEntry, type UpdateHandle } from "../platform/services";
 
 /*
  * Updates: check (anonymously, only the latest.json of the newest GitHub release), show the
@@ -17,7 +17,9 @@ export const update = createStore<{
   version: string | null;
   progress: number;
   checkedAt: number | null;
-}>({ current: null, phase: "idle", version: null, progress: 0, checkedAt: null });
+  /** Changelog of the new version (all versions, filtered in the UI); null = not loaded. */
+  notes: ChangelogEntry[] | null;
+}>({ current: null, phase: "idle", version: null, progress: 0, checkedAt: null, notes: null });
 
 let found: UpdateHandle | null = null;
 
@@ -27,7 +29,12 @@ export async function checkForUpdate() {
   update.set((s) => ({ ...s, phase: "checking" }));
   try {
     found = await updater.check();
-    update.set((s) => ({ ...s, phase: found ? "available" : "current", version: found?.version ?? null, checkedAt: Date.now() }));
+    const version = found?.version ?? null;
+    const known = update.get();
+    update.set((s) => ({ ...s, phase: found ? "available" : "current", version, checkedAt: Date.now(), notes: version === known.version ? s.notes : null }));
+    if (version && (version !== known.version || !known.notes)) {
+      void fetchChangelog(version).then((notes) => update.get().version === version && update.set((s) => ({ ...s, notes })));
+    }
   } catch {
     found = null;
     update.set((s) => ({ ...s, phase: "error", checkedAt: Date.now() }));

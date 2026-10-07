@@ -26,6 +26,7 @@ import { HelloPrompt } from "./HelloPrompt";
 import { PasswordForm, TotpForm } from "./forms";
 import { errorText } from "./errors";
 import { t } from "../../i18n";
+import { togglePresentation, usePresenting } from "../privacy/store";
 
 /** Hide a shown password again after this long. */
 const REVEAL_MS = 15_000;
@@ -41,6 +42,41 @@ type Screen = { kind: "list" } | { kind: "password"; item: VaultItem | null; pas
  * Leaving the tool or closing the notch locks it again.
  */
 export function VaultView() {
+  const hidden = usePresenting();
+  return (
+    <AnimatePresence mode="popLayout" initial={false}>
+      {hidden ? (
+        <motion.div
+          key="hidden"
+          className="h-full"
+          initial={{ opacity: 0, filter: "blur(4px)" }}
+          animate={{ opacity: 1, filter: "blur(0px)", transition: content.enter }}
+          exit={{ opacity: 0, filter: "blur(4px)", transition: content.exit }}
+        >
+          <Empty
+            icon={EyeSlash}
+            title={t("Im Präsentationsmodus ausgeblendet")}
+            text={t("Der Tresor bleibt gesperrt, bis der Präsentationsmodus endet.")}
+            action={<Button onClick={togglePresentation}>{t("Präsentationsmodus beenden")}</Button>}
+          />
+        </motion.div>
+      ) : (
+        <motion.div
+          key="vault"
+          className="h-full"
+          initial={{ opacity: 0, filter: "blur(4px)" }}
+          animate={{ opacity: 1, filter: "blur(0px)", transition: content.enter }}
+          exit={{ opacity: 0, filter: "blur(4px)", transition: content.exit }}
+        >
+          <VaultContent />
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
+/** Unmounted in presentation mode, which also locks the vault. */
+function VaultContent() {
   const status = vaultStatus.use();
   const [kind, setKindState] = useState<VaultKind>(savedKind);
   const [screen, setScreen] = useState<Screen>({ kind: "list" });

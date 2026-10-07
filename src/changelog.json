@@ -1,0 +1,104 @@
+[
+  {
+    "version": "2.5.0",
+    "date": "2026-10-07",
+    "items": [
+      {
+        "de": "Lautstärke pro App im Player – wie der Windows-Mixer",
+        "en": "Volume per app in the player – like the Windows mixer"
+      },
+      {
+        "de": "Klick auf Cover oder Titel öffnet die App, die gerade spielt",
+        "en": "Click the cover or title to open the app that's playing"
+      },
+      {
+        "de": "Temperatur in °C oder °F, Uhrzeit in 24 oder 12 Stunden",
+        "en": "Temperature in °C or °F, clock in 24 or 12 hours"
+      },
+      {
+        "de": "Präsentationsmodus: blendet Zwischenablage, Kontostände und Tresor beim Bildschirmteilen aus",
+        "en": "Presentation mode: hides clipboard, balances and vault while you share your screen"
+      },
+      {
+        "de": "Neuerungen direkt hier – auch von übersprungenen Versionen",
+        "en": "What's new, right here – including versions you skipped"
+      },
+      {
+        "de": "Fokus-Modus als dünne Linie am Rand – und an/aus direkt im Tray-Menü",
+        "en": "Focus mode as a thin line at the edge – and on/off right from the tray menu"
+      },
+      {
+        "de": "Klicks direkt unter der Notch gehen nicht mehr verloren",
+        "en": "Clicks right below the notch no longer get lost"
+      },
+      {
+        "de": "Bilder in der Zwischenablage brauchen deutlich weniger Arbeitsspeicher",
+        "en": "Clipboard images use far less memory"
+      },
+      {
+        "de": "Cover wechseln weich statt hart, in der kleinen Notch und im Player",
+        "en": "Covers change smoothly, in the closed notch and in the player"
+      }
+    ]
+  },
+  {
+    "version": "1.2.1",
+    "date": "2026-10-05",
+    "items": [
+      {
+        "de": "Album-Cover aus Spotifast werden angezeigt",
+        "en": "Album covers from Spotifast show up"
+      },
+      {
+        "de": "Flüssigere Animationen beim Öffnen und Schließen",
+        "en": "Smoother animations when opening and closing"
+      },
+      {
+        "de": "Discord-Anleitung um den Redirect http://localhost ergänzt",
+        "en": "Discord guide now includes the http://localhost redirect"
+      }
+    ]
+  },
+  {
+    "version": "1.2.0",
+    "date": "2026-10-05",
+    "items": [
+      {
+        "de": "Tresor mit Windows Hello entsperren – Gesicht, Finger oder Windows-PIN",
+        "en": "Unlock the vault with Windows Hello – face, fingerprint or Windows PIN"
+      },
+      {
+        "de": "Zusätzlich AES-256-verschlüsselt über den Sicherheitschip (TPM)",
+        "en": "Additionally AES-256 encrypted via the security chip (TPM)"
+      }
+    ]
+  },
+  {
+    "version": "1.1.0",
+    "date": "2026-10-05",
+    "items": [
+      {
+        "de": "Neu: Tresor für Passwörter und 2FA-Codes, verschlüsselt auf deinem PC",
+        "en": "New: vault for passwords and 2FA codes, encrypted on your PC"
+      },
+      {
+        "de": "2FA hinzufügen per Screenshot vom QR-Code und Strg + V",
+        "en": "Add 2FA with a screenshot of the QR code and Ctrl + V"
+      },
+      {
+        "de": "Kopierte Passwörter landen in keinem Verlauf und sind nach 30 s weg",
+        "en": "Copied passwords stay out of every history and clear after 30 s"
+      }
+    ]
+  },
+  {
+    "version": "1.0.0",
+    "date": "2026-10-05",
+    "items": [
+      {
+        "de": "Erste Version",
+        "en": "First release"
+      }
+    ]
+  }
+]

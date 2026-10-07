@@ -33,8 +33,8 @@ impl HitRect {
         x >= self.x && x <= self.x + self.w && y >= self.y && y <= self.y + self.h
     }
 
-    /// Larger zone while a mouse button is held, so files are easier to drop onto
-    /// the small closed notch (quick drop).
+    /// Larger zone while something is dragged towards the notch, so files are easier
+    /// to drop onto the small closed notch (quick drop).
     fn grown(&self) -> HitRect {
         HitRect { x: self.x - DROP_MARGIN, y: self.y, w: self.w + DROP_MARGIN * 2.0, h: self.h + DROP_MARGIN }
     }
@@ -42,6 +42,8 @@ impl HitRect {
 
 /// Extra margin of the drop zone in CSS px.
 const DROP_MARGIN: f64 = 48.0;
+/// Movement (CSS px) after the press before it counts as a drag.
+const DRAG_START: f64 = 6.0;
 
 #[derive(Default)]
 pub struct HitState {
@@ -87,6 +89,9 @@ pub fn spawn(app: AppHandle, window: WebviewWindow) {
         let mut last_inside: Option<bool> = None;
         let mut last_ignore: Option<bool> = None;
         let mut was_down = false;
+        // Where the current press started; None = button up or the press began near the notch.
+        let mut drag_from: Option<(f64, f64)> = None;
+        let mut drag_active = false;
         let (mut clicks, mut last_click) = (0u32, Instant::now());
 
         loop {
@@ -128,9 +133,22 @@ pub fn spawn(app: AppHandle, window: WebviewWindow) {
                 }
                 continue;
             }
+            // Grow the zone only for a real drag that started away from the notch (a file
+            // from Explorer). A plain click right below the notch must reach the app
+            // underneath; growing on every press swallowed those clicks (issue #7).
+            if dragging && !was_down {
+                drag_from = (!rect.grown().contains(x, y)).then_some((x, y));
+                drag_active = false;
+            } else if !dragging {
+                drag_from = None;
+                drag_active = false;
+            }
+            if let Some((fx, fy)) = drag_from {
+                drag_active |= (x - fx).hypot(y - fy) > DRAG_START;
+            }
             was_down = dragging;
 
-            let inside = if dragging { rect.grown() } else { rect }.contains(x, y);
+            let inside = if drag_active { rect.grown() } else { rect }.contains(x, y);
             let ignore = !inside && !*state.pinned.lock().unwrap();
 
             // Only call on change: every call goes through the event loop.

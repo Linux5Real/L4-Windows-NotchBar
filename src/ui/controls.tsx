@@ -259,6 +259,17 @@ export function Empty(props: {
   );
 }
 
+/** Hidden content (presentation mode): soft bars where the text would be. */
+export function Redacted({ lines = 2, className = "" }: { lines?: number; className?: string }) {
+  return (
+    <div role="img" aria-label={t("Ausgeblendet")} className={`flex flex-col gap-1.5 ${className}`}>
+      {Array.from({ length: lines }, (_, i) => (
+        <span key={i} className="h-2 rounded-full bg-fill-2" style={{ width: i === lines - 1 && lines > 1 ? "55%" : "100%" }} />
+      ))}
+    </div>
+  );
+}
+
 /** Slider. Drags via pointer capture; arrow keys ±step. */
 export function Slider(props: {
   value: number;

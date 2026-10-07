@@ -14,6 +14,7 @@ import { sizeOverride } from "./size";
 import { NotchShape } from "./NotchShape";
 import { drop } from "../platform/drop";
 import { settings } from "../settings/store";
+import { useUnseen } from "../lib/changelog";
 import { nav, navigate } from "./nav";
 import { update } from "../lib/update";
 import { findTab, settingsTab, tabs, type NotchTab } from "./tabs";
@@ -26,7 +27,9 @@ const RESUME_MS = 60_000;
 export function Notch() {
   const { status, open, close, dismiss, toggle, onPointerEnter, onPointerLeave } = useNotchState();
   const focus = focusMode.use();
-  const toolSettings = settings.use().tools;
+  const { tools: toolSettings, display: displaySettings } = settings.use();
+  // Focus mode as a line: no live activity, no dots, only the thin strip at the edge.
+  const line = focus && displaySettings.focusStyle === "line";
   const visible = toolSettings.filter((t) => t.enabled).map((t) => findTab(t.id)).filter((t): t is NotchTab => !!t);
   const { tabId } = nav.use();
   // Hidden tool active (e.g. just disabled) → first visible one.
@@ -57,7 +60,7 @@ export function Notch() {
 
   const override = sizeOverride.use();
   const size = override?.tabId === tab.id ? override : tab.size;
-  const shape = shapeFor(status, live.id, size);
+  const shape = line ? geometry.line : shapeFor(status, live.id, size);
   const sticky = useStickyHitZone(status, size.h);
   const transition = useTransitionFor(status, shape);
 
@@ -123,7 +126,7 @@ export function Notch() {
     <div
       className="pointer-events-none fixed inset-x-0 top-0 z-50 flex justify-center transition-opacity duration-200"
       // In the browser the notch moves inside the window; natively the whole window moves (display.rs).
-      style={{ ["--accent" as string]: np?.accent, opacity: focus ? 0.5 : 1, transform: isNative ? undefined : `translateX(${drag.offset}px)` }}
+      style={{ ["--accent" as string]: np?.accent, opacity: focus && !line ? 0.5 : 1, transform: isNative ? undefined : `translateX(${drag.offset}px)` }}
     >
       {/* Hit zone: bigger than the visible shape (Fitts) and flush with the top edge. */}
       <div
@@ -139,8 +142,8 @@ export function Notch() {
         onClick={onClick}
       >
         <NotchShape geometry={shape} transition={transition} elevated={status === "open"}>
-          <LiveSlot id={status === "open" ? null : live.id} />
-          <PrivacyDots />
+          <LiveSlot id={status === "open" || line ? null : live.id} />
+          {!line && <PrivacyDots />}
 
           <AnimatePresence>
             {status === "open" && (
@@ -216,6 +219,9 @@ function Dock({ tabs, activeId }: { tabs: NotchTab[]; activeId: string }) {
   if (activeId !== settingsTab.id) lastTool.current = activeId;
   const inSettings = activeId === settingsTab.id;
   const updateReady = update.use().phase === "available";
+  // Dot on the gear = update ready or unseen changes → jump straight to that section.
+  const unseen = useUnseen().length > 0;
+  const badge = updateReady || unseen;
 
   return (
     <div className="flex shrink-0 items-start justify-center gap-0.5 px-4 pt-1" style={{ height: DOCK_HEIGHT }}>
@@ -227,9 +233,8 @@ function Dock({ tabs, activeId }: { tabs: NotchTab[]; activeId: string }) {
         label={t(settingsTab.label)}
         icon={GearSix}
         active={inSettings}
-        badge={updateReady}
-        // Dot on the gear = update ready → jump straight to that section.
-        onClick={() => (inSettings ? navigate(lastTool.current ?? tabs[0].id) : navigate(settingsTab.id, updateReady ? "updates" : null))}
+        badge={badge}
+        onClick={() => (inSettings ? navigate(lastTool.current ?? tabs[0].id) : navigate(settingsTab.id, badge ? "updates" : null))}
       />
     </div>
   );

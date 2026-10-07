@@ -4,6 +4,7 @@ import { CircleNotch, Drop, MagnifyingGlass, MapPin, NavigationArrow, Wind } fro
 import { content, fade, spin } from "../../design/motion";
 import { settings } from "../../settings/store";
 import { Skeleton } from "../../ui/controls";
+import { formatTemp, formatWind } from "../../lib/format";
 import { locale, t } from "../../i18n";
 import { choosePlace, describe, detectPlace, loadForecast, searchPlaces, type Forecast, type Place } from "./store";
 
@@ -67,8 +68,8 @@ export function WeatherView() {
                   <div key={d.date} className={`flex flex-col items-center gap-1 rounded-[10px] py-1.5 ${i === 0 ? "bg-fill-1" : ""}`} title={text}>
                     <span className="text-caption text-label-3">{i === 0 ? t("Heute") : weekday().format(new Date(`${d.date}T12:00:00`)).replace(".", "")}</span>
                     <I size={18} weight="fill" className="text-label-2" />
-                    <span className="tabular text-caption font-semibold text-label">{Math.round(d.max)}°</span>
-                    <span className="tabular -mt-1 text-caption text-label-3">{Math.round(d.min)}°</span>
+                    <span className="tabular text-caption font-semibold text-label">{formatTemp(d.max)}</span>
+                    <span className="tabular -mt-1 text-caption text-label-3">{formatTemp(d.min)}</span>
                   </div>
                 );
               })}
@@ -86,7 +87,7 @@ function Current({ data, name, auto, onChangePlace }: { data: Forecast; name: st
   return (
     <div className="flex items-center gap-3">
       <I size={38} weight="fill" className="text-label" />
-      <span className="tabular text-[34px] leading-none font-semibold tracking-[-0.03em]">{Math.round(data.current.temp)}°</span>
+      <span className="tabular text-[34px] leading-none font-semibold tracking-[-0.03em]">{formatTemp(data.current.temp)}</span>
       <div className="min-w-0">
         <button onClick={onChangePlace} className="flex items-center gap-1 text-footnote font-medium text-label hover:text-label-2" title={t("Ort ändern")}>
           {auto ? <NavigationArrow size={11} weight="fill" /> : <MapPin size={11} weight="fill" />} {name}
@@ -94,8 +95,8 @@ function Current({ data, name, auto, onChangePlace }: { data: Forecast; name: st
         <div className="text-caption text-label-3">{text}</div>
       </div>
       <div className="ml-auto flex flex-col items-end gap-0.5 text-caption text-label-3">
-        <span>{t("gefühlt {n}°", { n: Math.round(data.current.feels) })}</span>
-        <span className="flex items-center gap-1"><Wind size={11} weight="bold" /> {Math.round(data.current.wind)} km/h</span>
+        <span>{t("gefühlt {n}", { n: formatTemp(data.current.feels) })}</span>
+        <span className="flex items-center gap-1"><Wind size={11} weight="bold" /> {formatWind(data.current.wind)}</span>
         {today && today.rain > 0 && <span className="flex items-center gap-1"><Drop size={11} weight="fill" /> {today.rain} %</span>}
       </div>
     </div>

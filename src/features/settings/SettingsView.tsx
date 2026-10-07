@@ -21,7 +21,7 @@ import { content, fade, springs } from "../../design/motion";
 import { alarmSounds, playAlarm, stopAlarm, type AlarmDuration } from "../../lib/sound";
 import { nav } from "../../notch/nav";
 import { tabs } from "../../notch/tabs";
-import { autostart, display, secrets, unlockFps, type MonitorInfo, type SecretName, type UsageId } from "../../platform/services";
+import { autostart, display, secrets, unlockFps, type ChangelogEntry, type MonitorInfo, type SecretName, type UsageId } from "../../platform/services";
 import { settings, updateAsk, updateSettings, type AskProvider } from "../../settings/store";
 import { BrandLogo, brandName } from "../../ui/brands";
 import { Button, Group, Row, Segmented, Select, Slider, Switch, TextField } from "../../ui/controls";
@@ -33,7 +33,9 @@ import { VaultSettings } from "../vault/VaultSettings";
 import { detectPlace } from "../weather/store";
 import { focusMode, setFocusMode } from "../../notch/focus";
 import { checkForUpdate, installUpdate, update } from "../../lib/update";
-import { t, tBackend } from "../../i18n";
+import { between, changelog, itemText, markSeen, useUnseen } from "../../lib/changelog";
+import { privacy, togglePresentation, usePresenting } from "../privacy/store";
+import { locale, t, tBackend } from "../../i18n";
 
 type PageId = "general" | "display" | "tools" | "timer" | "ai" | "accounts";
 
@@ -51,6 +53,7 @@ const sectionPage: Record<string, PageId> = {
   weather: "general",
   updates: "general",
   display: "display",
+  presentation: "display",
   alarm: "timer",
   ask: "ai",
   usage: "ai",
@@ -125,7 +128,12 @@ export function SettingsView() {
                 <Updates />
               </>
             )}
-            {page === "display" && <Display />}
+            {page === "display" && (
+              <>
+                <Display />
+                <Presentation />
+              </>
+            )}
             {page === "tools" && (
               <>
                 <Tools />
@@ -158,6 +166,10 @@ export function SettingsView() {
 function Updates() {
   const auto = settings.use().updates.auto;
   const u = update.use();
+  const unseen = useUnseen();
+  // Remember what was new when the section opened, so the labels stay while reading.
+  const [fresh] = useState(() => new Set(unseen.map((e) => e.version)));
+  const [showLog, setShowLog] = useState(false);
   const busy = u.phase === "checking" || u.phase === "downloading";
   const status = {
     idle: undefined,
@@ -167,6 +179,7 @@ function Updates() {
     downloading: t("Wird geladen … {n} %", { n: Math.round(u.progress * 100) }),
     error: t("Prüfung fehlgeschlagen – später erneut versuchen"),
   }[u.phase];
+  const upcoming = u.notes && u.version && u.current ? between(u.notes, u.current, u.version) : [];
 
   return (
     <Group title={t("Updates")} id="settings-updates">
@@ -189,6 +202,32 @@ function Updates() {
                 </Button>
               )}
             </Row>
+            {upcoming.length > 0 && <ChangelogList entries={upcoming} />}
+          </motion.div>
+        )}
+      </AnimatePresence>
+      <Row
+        label={
+          <span className="flex items-center gap-1.5">
+            {t("Neuerungen")}
+            {unseen.length > 0 && !showLog && <span className="size-[7px] rounded-full bg-link" />}
+          </span>
+        }
+        hint={unseen.length > 0 ? t(unseen.length === 1 ? "Neu in Version {v}" : "{n} Versionen seit deinem letzten Update", { v: unseen[0].version, n: unseen.length }) : undefined}
+      >
+        <Button
+          onClick={() => {
+            if (!showLog) markSeen();
+            setShowLog((v) => !v);
+          }}
+        >
+          {showLog ? t("Ausblenden") : t("Anzeigen")}
+        </Button>
+      </Row>
+      <AnimatePresence initial={false}>
+        {showLog && (
+          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={fade} className="overflow-hidden">
+            <ChangelogList entries={between(changelog, null, u.current ?? changelog[0].version)} fresh={fresh} />
           </motion.div>
         )}
       </AnimatePresence>
@@ -196,6 +235,37 @@ function Updates() {
         <Switch label={t("Automatisch suchen")} checked={auto} onChange={(on) => updateSettings({ updates: { auto: on } })} />
       </Row>
     </Group>
+  );
+}
+
+/** Versions with their short notes; `fresh` marks the ones new since your last update. */
+function ChangelogList({ entries, fresh }: { entries: ChangelogEntry[]; fresh?: Set<string> }) {
+  const date = new Intl.DateTimeFormat(locale(), { day: "numeric", month: "short", year: "numeric" });
+  return (
+    <div className="flex flex-col gap-3 px-3 pt-1.5 pb-3">
+      {entries.map((e, i) => (
+        <motion.div
+          key={e.version}
+          initial={{ opacity: 0, transform: "translateY(4px)" }}
+          animate={{ opacity: 1, transform: "translateY(0px)" }}
+          transition={{ ...content.enter, delay: 0.04 * Math.min(i, 6) }}
+        >
+          <div className="flex items-baseline gap-1.5 text-caption">
+            <span className="tabular font-semibold text-label">{e.version}</span>
+            {fresh?.has(e.version) && <span className="font-medium text-link">{t("Neu")}</span>}
+            <span className="ml-auto text-label-3">{date.format(new Date(`${e.date}T12:00:00`))}</span>
+          </div>
+          <ul className="mt-1 flex flex-col gap-0.5">
+            {e.items.map((item, j) => (
+              <li key={j} className="flex gap-2 text-footnote text-label-2">
+                <span aria-hidden className="mt-[7px] size-[3px] shrink-0 rounded-full bg-label-3" />
+                <span>{itemText(item)}</span>
+              </li>
+            ))}
+          </ul>
+        </motion.div>
+      ))}
+    </div>
   );
 }
 
@@ -299,6 +369,18 @@ function General() {
           ]}
         />
       </Row>
+      <Row label={t("Uhrzeit")}>
+        <Segmented
+          id="clock-format"
+          size="sm"
+          value={s.units.clock}
+          onChange={(clock) => updateSettings((p) => ({ units: { ...p.units, clock } }))}
+          options={[
+            { value: "24", label: t("24 Std.") },
+            { value: "12", label: t("12 Std.") },
+          ]}
+        />
+      </Row>
       <Row label={t("Öffnen")}>
         <Segmented
           id="open-mode"
@@ -399,8 +481,23 @@ function Display() {
           </Button>
         </Row>
       )}
-      <Row label={t("Fokus-Modus")} hint={t("Halb durchsichtig, Klicks gehen durch. 3× schnell auf die Notch klicken schaltet um.")}>
+      <Row label={t("Fokus-Modus")} hint={t("Klicks gehen durch. 3× schnell auf die Notch klicken schaltet um – oder im Tray-Menü.")}>
         <Switch label={t("Fokus-Modus")} checked={focus} onChange={setFocusMode} />
+      </Row>
+      <Row
+        label={t("Fokus-Darstellung")}
+        hint={d.focusStyle === "line" ? t("Nur eine dünne Linie am Rand, ohne Musik und Co.") : t("Halb durchsichtig, Musik und Co. bleiben sichtbar")}
+      >
+        <Segmented
+          id="focus-style"
+          size="sm"
+          value={d.focusStyle}
+          onChange={(focusStyle) => updateSettings((cur) => ({ display: { ...cur.display, focusStyle } }))}
+          options={[
+            { value: "dim", label: t("Durchsichtig") },
+            { value: "line", label: t("Linie") },
+          ]}
+        />
       </Row>
       <Row
         label={t("Gaming-Modus")}
@@ -427,6 +524,33 @@ function Display() {
       <Row label={t("Aufnahme-Punkte")} hint={t("Grün: Mikrofon/Kamera aktiv · Rot: Bildschirm wird aufgenommen")}>
         <Switch label={t("Aufnahme-Punkte")} checked={s.privacyDots} onChange={(privacyDots) => updateSettings({ privacyDots })} />
       </Row>
+    </Group>
+  );
+}
+
+/** Presentation mode: one switch, plus automatic while the screen is recorded or shared. */
+function Presentation() {
+  const { manual, auto } = settings.use().presentation;
+  const presenting = usePresenting();
+  const recording = privacy.use().screen;
+  return (
+    <Group title={t("Präsentationsmodus")} id="settings-presentation">
+      <Row
+        label={t("Präsentationsmodus")}
+        hint={presenting && !manual ? t("Aktiv – Bildschirmaufnahme erkannt") : t("Blendet Zwischenablage, Kontostände und Tresor aus")}
+      >
+        <Switch label={t("Präsentationsmodus")} checked={presenting} onChange={togglePresentation} />
+      </Row>
+      <Row label={t("Bei Bildschirmaufnahme")} hint={t("Teams, Discord, OBS … – schaltet sich danach wieder ab")}>
+        <Switch
+          label={t("Bei Bildschirmaufnahme")}
+          checked={auto}
+          onChange={(on) => updateSettings((cur) => ({ presentation: { ...cur.presentation, auto: on } }))}
+        />
+      </Row>
+      {auto && recording && !presenting && (
+        <Row label={t("Für diese Aufnahme aus")} hint={t("Schaltet sich bei der nächsten wieder ein")} />
+      )}
     </Group>
   );
 }
@@ -599,7 +723,7 @@ function FpsUnlockRow() {
 
 /** Weather location: automatic via IP or fixed, right here without opening the weather tool. */
 function Weather() {
-  const w = settings.use().weather;
+  const { weather: w, units } = settings.use();
   const [searching, setSearching] = useState(false);
   return (
     <Group title={t("Wetter")} id="settings-weather">
@@ -617,6 +741,18 @@ function Weather() {
           options={[
             { value: "auto", label: t("Automatisch") },
             { value: "manual", label: t("Manuell") },
+          ]}
+        />
+      </Row>
+      <Row label={t("Einheit")}>
+        <Segmented
+          id="temp-unit"
+          size="sm"
+          value={units.temp}
+          onChange={(temp) => updateSettings((p) => ({ units: { ...p.units, temp } }))}
+          options={[
+            { value: "c", label: "°C" },
+            { value: "f", label: "°F" },
           ]}
         />
       </Row>

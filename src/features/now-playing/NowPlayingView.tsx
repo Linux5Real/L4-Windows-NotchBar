@@ -1,43 +1,74 @@
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useAnimationFrame, useMotionValue, useTransform } from "motion/react";
-import { MusicNoteSimple, Pause, Play, SkipBack, SkipForward } from "@phosphor-icons/react";
-import { content, springs } from "../../design/motion";
+import { ArrowUpRight, MusicNoteSimple, Pause, Play, SkipBack, SkipForward } from "@phosphor-icons/react";
+import { artwork as artworkSwap, content, springs } from "../../design/motion";
+import { useSmoothArtwork } from "./artwork";
 import { livePosition, media, useNowPlaying, type NowPlaying } from "../../platform/media";
 import { holdOpen } from "../../notch/useNotchState";
+import { requestSize } from "../../notch/size";
+import { findTab } from "../../notch/tabs";
+import { MIXER_MAX_ROWS, MIXER_ROW, MixerList, MixerToggle, useMixer } from "./Mixer";
 import { Equalizer } from "./Equalizer";
 import { t } from "../../i18n";
 
 /*
  * Layout like the expanded Dynamic Island:
- *   [Cover] Title / Artist                   [EQ]
+ *   [Cover] Title / Artist                   [EQ]     ← click: open the playing app
  *   0:52 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -3:10
- *              ⏮      ⏯      ⏭
+ *                   ⏮      ⏯      ⏭               [⌄]
+ *   (mixer list, the notch grows down)
  */
 export function NowPlayingView() {
   const np = useNowPlaying();
+  const mix = useMixer();
+  const [mixerOpen, setMixerOpen] = useState(false);
+  const source = mix.source?.name;
+
+  // The mixer grows the notch by its rows (at most MIXER_MAX_ROWS, then it scrolls).
+  const rows = Math.min(MIXER_MAX_ROWS, (mix.system ? 1 : 0) + Math.max(1, mix.apps.length));
+  useEffect(() => {
+    if (!mixerOpen || !np) return requestSize("media", null);
+    const base = findTab("media")!.size;
+    requestSize("media", { w: base.w, h: base.h + rows * MIXER_ROW + 14 });
+  }, [mixerOpen, rows, !!np]);
+  useEffect(() => () => requestSize("media", null), []);
+
   if (!np) return <Empty />;
 
   return (
     <div className="flex h-full flex-col px-5 pt-1 pb-2">
       <div className="flex items-center gap-3">
-        <Artwork np={np} />
-        <div className="relative min-w-0 flex-1">
-          <AnimatePresence mode="popLayout" initial={false}>
-            <motion.div
-              key={np.title}
-              initial={{ opacity: 0, filter: "blur(4px)" }}
-              animate={{ opacity: 1, filter: "blur(0px)", transition: content.enter }}
-              exit={{ opacity: 0, filter: "blur(4px)", transition: content.exit }}
-            >
-              <div className="truncate text-title font-semibold">{np.title}</div>
-              <div className="truncate text-body text-label-2">{np.artist}</div>
-            </motion.div>
-          </AnimatePresence>
-        </div>
+        <button
+          onClick={() => void media.openSource()}
+          title={source ? t("In {app} öffnen", { app: source }) : t("App öffnen")}
+          className="group/source pressable flex min-w-0 flex-1 items-center gap-3 rounded-[12px] text-left"
+        >
+          <Artwork np={np} />
+          <div className="relative min-w-0 flex-1">
+            <AnimatePresence mode="popLayout" initial={false}>
+              <motion.div
+                key={np.title}
+                initial={{ opacity: 0, filter: "blur(4px)" }}
+                animate={{ opacity: 1, filter: "blur(0px)", transition: content.enter }}
+                exit={{ opacity: 0, filter: "blur(4px)", transition: content.exit }}
+              >
+                <div className="truncate text-title font-semibold">{np.title}</div>
+                <div className="truncate text-body text-label-2">{np.artist}</div>
+              </motion.div>
+            </AnimatePresence>
+          </div>
+        </button>
         <Equalizer playing={np.isPlaying} height={16} />
       </div>
       <Progress np={np} />
-      <Controls playing={np.isPlaying} />
+      <div className="mt-2 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+        <div />
+        <Controls playing={np.isPlaying} />
+        <div className="flex min-w-0 justify-end">
+          <MixerToggle open={mixerOpen} onToggle={() => setMixerOpen((o) => !o)} />
+        </div>
+      </div>
+      <AnimatePresence>{mixerOpen && <MixerList key="mixer" data={mix} />}</AnimatePresence>
     </div>
   );
 }
@@ -46,6 +77,7 @@ export function NowPlayingView() {
 export const ARTWORK_LAYOUT_ID = "now-playing-artwork";
 
 function Artwork({ np }: { np: NowPlaying }) {
+  const artwork = useSmoothArtwork(np.artwork);
   return (
     // Outer wrapper flies (layout), inner one scales on pause; separate so they don't fight over transform.
     <motion.div layoutId={ARTWORK_LAYOUT_ID} transition={springs.morph} className="size-14 shrink-0">
@@ -57,16 +89,16 @@ function Artwork({ np }: { np: NowPlaying }) {
         transition={springs.snappy}
       >
         <AnimatePresence initial={false}>
-          {np.artwork ? (
+          {artwork ? (
             <motion.img
-              key={np.artwork}
-              src={np.artwork}
+              key={artwork}
+              src={artwork}
               alt=""
               draggable={false}
               className="absolute inset-0 size-full rounded-[12px] object-cover"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1, transition: { duration: 0.4 } }}
-              exit={{ opacity: 0, transition: { duration: 0.4 } }}
+              initial={{ opacity: 0, filter: "blur(4px)" }}
+              animate={{ opacity: 1, filter: "blur(0px)", transition: artworkSwap.enter }}
+              exit={{ opacity: 0, transition: artworkSwap.exit }}
             />
           ) : (
             // No cover (some browser players): a calm placeholder instead of a gap.
@@ -74,8 +106,8 @@ function Artwork({ np }: { np: NowPlaying }) {
               key="placeholder"
               className="absolute inset-0 flex items-center justify-center rounded-[12px] bg-fill-2 text-label-3"
               initial={{ opacity: 0 }}
-              animate={{ opacity: 1, transition: { duration: 0.4 } }}
-              exit={{ opacity: 0, transition: { duration: 0.4 } }}
+              animate={{ opacity: 1, transition: artworkSwap.enter }}
+              exit={{ opacity: 0, transition: artworkSwap.exit }}
             >
               <MusicNoteSimple size={22} weight="fill" />
             </motion.div>
@@ -87,6 +119,10 @@ function Artwork({ np }: { np: NowPlaying }) {
           animate={{ backgroundColor: np.isPlaying ? "rgb(0 0 0 / 0)" : "rgb(0 0 0 / 0.35)" }}
           transition={{ duration: 0.25 }}
         />
+        {/* Hover: hint that a click opens the app. */}
+        <span className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-[12px] bg-black/45 text-label opacity-0 transition-opacity duration-150 group-hover/source:opacity-100">
+          <ArrowUpRight size={20} weight="bold" />
+        </span>
       </motion.div>
     </motion.div>
   );
@@ -183,7 +219,7 @@ function Progress({ np }: { np: NowPlaying }) {
 
 function Controls({ playing }: { playing: boolean }) {
   return (
-    <div className="mt-2 flex items-center justify-center gap-6">
+    <div className="flex items-center justify-center gap-6">
       <IconButton label={t("Zurück")} onClick={media.previous}>
         <SkipBack size={20} weight="fill" />
       </IconButton>

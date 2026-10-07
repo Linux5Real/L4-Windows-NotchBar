@@ -39,6 +39,15 @@ export const fade = { duration: 0.16 * slow, ease: easeOut } satisfies Transitio
 /** Crossfade for large areas (covers, charts), a bit calmer. */
 export const crossfade = { duration: 0.4 * slow, ease: "easeInOut" } satisfies Transition;
 
+/**
+ * Cover swap: the new image fades in on top, the old one leaves a beat later, so
+ * there is never a gap or a hard cut (same calm pace as the accent color).
+ */
+export const artwork = {
+  enter: { duration: 0.45 * slow, ease: "easeInOut" } satisfies Transition,
+  exit: { duration: 0.35 * slow, delay: 0.2 * slow, ease: "easeInOut" } satisfies Transition,
+} as const;
+
 /** Menus/popovers: fast in, even faster out. */
 export const popover = {
   enter: { duration: 0.16 * slow, ease: easeOut },

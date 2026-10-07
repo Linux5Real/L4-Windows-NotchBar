@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { ArrowClockwise, Key, WarningCircle } from "@phosphor-icons/react";
 import { DepotIcon } from "../../ui/icons";
 import { content, fade, spin, springs } from "../../design/motion";
-import { formatAgo, formatMoney, formatPercent } from "../../lib/format";
+import { formatAgo, formatMoney, formatPercent, formatTime } from "../../lib/format";
 import { createStore } from "../../lib/store";
 import { HeaderActions, HeaderButton } from "../../notch/header";
 import { navigate } from "../../notch/nav";
@@ -11,6 +11,10 @@ import { fetchTrading, type TradingData } from "../../platform/services";
 import { settings } from "../../settings/store";
 import { Button, Empty, Segmented, Skeleton } from "../../ui/controls";
 import { locale, t } from "../../i18n";
+import { usePresenting } from "../privacy/store";
+
+/** Amounts in presentation mode: percentages stay, money is hidden. */
+const MASK = "••••••";
 
 /** Polls while the tool is open. The API allows one request per 5 s. */
 const POLL_MS = 30_000;
@@ -39,6 +43,8 @@ export function TradingView() {
   const env = settings.use().trading.env;
   const { data, error, loading, updatedAt, refresh } = useTrading(env);
   const r = range.use();
+  const hidden = usePresenting();
+  const money: typeof formatMoney = (...args) => (hidden ? MASK : formatMoney(...args));
 
   const actions = (
     <HeaderActions>
@@ -74,26 +80,26 @@ export function TradingView() {
       {actions}
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <AnimatedValue className="tabular text-[30px] leading-9 font-semibold tracking-[-0.025em]" text={formatMoney(data.totalValue, data.currency)} />
+          <AnimatedValue className="tabular text-[30px] leading-9 font-semibold tracking-[-0.025em]" text={money(data.totalValue, data.currency)} />
           {today ? (
-            <Change value={today.change} pct={today.pct} currency={data.currency} suffix={today.label} />
+            <Change value={today.change} pct={today.pct} money={money(today.change, data.currency, { signed: true })} suffix={today.label} />
           ) : (
             <div className="text-footnote text-label-3">{t("Tagesänderung ab dem nächsten Abruf")}</div>
           )}
         </div>
-        <Chart series={series} currency={data.currency} rangeLabel={t(ranges.find((x) => x.value === r)!.label)} />
+        <Chart series={series} money={(v) => money(v, data.currency, { signed: true })} rangeLabel={t(ranges.find((x) => x.value === r)!.label)} />
       </div>
 
       <div className="mt-3 grid grid-cols-[1fr_1fr_1.45fr_1fr] gap-1.5">
-        <Stat label={t("Cash")} value={formatMoney(data.cash, data.currency)} />
-        <Stat label={t("Investiert")} value={formatMoney(data.invested, data.currency)} />
+        <Stat label={t("Cash")} value={money(data.cash, data.currency)} />
+        <Stat label={t("Investiert")} value={money(data.invested, data.currency)} />
         <Stat
           label={t("Offen")}
-          value={formatMoney(data.unrealized, data.currency, { signed: true })}
+          value={money(data.unrealized, data.currency, { signed: true })}
           sub={openPct !== null ? formatPercent(openPct) : undefined}
           tone={data.unrealized}
         />
-        <Stat label={t("Realisiert")} value={formatMoney(data.realized, data.currency, { signed: true })} tone={data.realized} />
+        <Stat label={t("Realisiert")} value={money(data.realized, data.currency, { signed: true })} tone={data.realized} />
       </div>
 
       <div className="-mx-2 mt-2 min-h-0 flex-1 overflow-y-auto px-2 [scrollbar-width:none]">
@@ -107,15 +113,15 @@ export function TradingView() {
               initial={{ opacity: 0, transform: "translateY(4px)" }}
               animate={{ opacity: 1, transform: "translateY(0px)" }}
               transition={{ ...content.enter, delay: 0.03 * i }}
-              title={`${p.quantity.toLocaleString(locale())} ${t("Stk.")} · Ø ${p.averagePrice.toLocaleString(locale())} → ${p.currentPrice.toLocaleString(locale())} ${p.priceCurrency}`}
+              title={hidden ? undefined : `${p.quantity.toLocaleString(locale())} ${t("Stk.")} · Ø ${p.averagePrice.toLocaleString(locale())} → ${p.currentPrice.toLocaleString(locale())} ${p.priceCurrency}`}
             >
               <div className="min-w-0 flex-1">
                 <div className="truncate text-footnote font-semibold text-label">{p.ticker}</div>
                 <div className="truncate text-caption text-label-3">{p.name}</div>
               </div>
               <div className="text-right">
-                <div className="tabular text-footnote text-label">{formatMoney(p.value, data.currency)}</div>
-                <div className={`tabular text-caption ${tone(p.pnl)}`}>{formatMoney(p.pnl, data.currency, { signed: true })}</div>
+                <div className="tabular text-footnote text-label">{money(p.value, data.currency)}</div>
+                <div className={`tabular text-caption ${tone(p.pnl)}`}>{money(p.pnl, data.currency, { signed: true })}</div>
               </div>
               <span className={`tabular w-[68px] rounded-[6px] py-0.5 text-center text-caption font-semibold ${pill(p.pnl)}`}>{formatPercent(pct)}</span>
             </motion.div>
@@ -174,7 +180,7 @@ function todayChange(d: TradingData): { change: number; pct: number | null; labe
   if (prev) return { change: pnlNow - prev.pnl, pct: prev.value > 0 ? ((pnlNow - prev.pnl) / prev.value) * 100 : null, label: t("heute") };
   const first = d.intraday[0];
   if (first && d.intraday.length >= 2) {
-    const since = new Date(first.t).toLocaleTimeString(locale(), { hour: "2-digit", minute: "2-digit" });
+    const since = formatTime(first.t);
     return { change: pnlNow - first.pnl, pct: first.value > 0 ? ((pnlNow - first.pnl) / first.value) * 100 : null, label: t("seit {time}", { time: since }) };
   }
   return null;
@@ -199,10 +205,10 @@ function pill(v: number): string {
   return v > 0.004 ? "bg-green/18 text-green" : v < -0.004 ? "bg-red/18 text-red" : "bg-fill-2 text-label-2";
 }
 
-function Change({ value, pct, currency, suffix }: { value: number; pct: number | null; currency: string; suffix: string }) {
+function Change({ value, pct, money, suffix }: { value: number; pct: number | null; money: string; suffix: string }) {
   return (
     <div className={`tabular text-footnote font-medium ${tone(value)}`}>
-      {formatMoney(value, currency, { signed: true })}
+      {money}
       {pct !== null && ` (${formatPercent(pct)})`} <span className="font-normal text-label-3">{suffix}</span>
     </div>
   );
@@ -221,7 +227,7 @@ function Stat({ label, value, sub, tone: t }: { label: string; value: string; su
 }
 
 /** Line + soft area, green or red depending on the range. Redraws on change. */
-function Chart({ series, currency, rangeLabel }: { series: number[]; currency: string; rangeLabel: string }) {
+function Chart({ series, money, rangeLabel }: { series: number[]; money: (v: number) => string; rangeLabel: string }) {
   const w = 210;
   const h = 56;
   const path = useMemo(() => {
@@ -270,7 +276,7 @@ function Chart({ series, currency, rangeLabel }: { series: number[]; currency: s
         </AnimatePresence>
       </svg>
       <span className="tabular text-caption text-label-3">
-        {t("G/V")} <span className={tone(path.delta)}>{formatMoney(path.delta, currency, { signed: true })}</span> · {rangeLabel}
+        {t("G/V")} <span className={tone(path.delta)}>{money(path.delta)}</span> · {rangeLabel}
       </span>
     </div>
   );

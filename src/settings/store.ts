@@ -27,7 +27,13 @@ export interface Settings {
    * Display: always on top or hidden in fullscreen; monitor name (null = primary);
    * `offset` = horizontal offset from the center in CSS px (set by dragging).
    */
-  display: { visibility: "always" | "hide-fullscreen"; monitor: string | null; offset: number };
+  display: {
+    visibility: "always" | "hide-fullscreen";
+    monitor: string | null;
+    offset: number;
+    /** Focus mode look: half transparent (as before) or shrunk to a thin line at the edge. */
+    focusStyle: "dim" | "line";
+  };
   /** Gaming mode: FPS + load in the closed notch: off, only in fullscreen, or always. */
   gaming: { mode: "off" | "fullscreen" | "on" };
   /** Dots like on iPhone: mic/camera (green) or screen recording (red) in use. */
@@ -36,6 +42,13 @@ export interface Settings {
   discord: { clientId: string };
   alarm: { sound: AlarmSound; volume: number; duration: AlarmDuration };
   language: "de" | "en";
+  /** Temperature and clock format; picked from the Windows region on first start. */
+  units: { temp: "c" | "f"; clock: "24" | "12" };
+  /**
+   * Presentation mode: hides clipboard previews, balances and the vault while sharing
+   * the screen. `manual` = switched on by hand, `auto` = on while a recording is detected.
+   */
+  presentation: { manual: boolean; auto: boolean };
   /** Check for a new version once a day, anonymously (installs only on click). */
   updates: { auto: boolean };
 }
@@ -77,16 +90,44 @@ const defaults: Settings = {
     },
   },
   weather: null,
-  display: { visibility: "always", monitor: null, offset: 0 },
+  display: { visibility: "always", monitor: null, offset: 0, focusStyle: "dim" },
   gaming: { mode: "off" },
   privacyDots: false,
   discord: { clientId: "" },
   alarm: { sound: "chime", volume: 0.7, duration: 5 },
   language: "en",
+  units: regionUnits(),
+  presentation: { manual: false, auto: true },
   updates: { auto: true },
 };
 
+/** °F and 12 h where the Windows region uses them (US & co.), otherwise °C and 24 h. */
+function regionUnits(): Settings["units"] {
+  const loc = navigator.language || "en-US";
+  let region = "";
+  let cycle: string | undefined;
+  try {
+    region = new Intl.Locale(loc).maximize().region ?? "";
+    cycle = new Intl.DateTimeFormat(loc, { hour: "numeric" }).resolvedOptions().hourCycle;
+  } catch {
+    // Unknown locale → metric, 24 h.
+  }
+  return {
+    temp: ["US", "LR", "MM", "BS", "BZ", "KY", "PW", "FM", "MH"].includes(region) ? "f" : "c",
+    clock: cycle === "h12" || cycle === "h11" ? "12" : "24",
+  };
+}
+
 export const hoverDelayMs: Record<Settings["hoverDelay"], number> = { fast: 90, normal: 220, patient: 480 };
+
+/** No settings saved yet = fresh install (read before the store writes its defaults). */
+export const firstRun = (() => {
+  try {
+    return localStorage.getItem("notch:settings") === null;
+  } catch {
+    return false;
+  }
+})();
 
 export const settings = createStore<Settings>(defaults, { persist: "settings" });
 
@@ -110,6 +151,8 @@ settings.set((s) => {
     gaming: { ...defaults.gaming, ...s.gaming },
     discord: { ...defaults.discord, ...s.discord },
     alarm: { ...defaults.alarm, ...s.alarm },
+    units: { ...defaults.units, ...s.units },
+    presentation: { ...defaults.presentation, ...s.presentation },
     updates: { ...defaults.updates, ...s.updates },
     ask: migrateAsk(s.ask),
   };

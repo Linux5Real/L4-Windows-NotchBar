@@ -1,7 +1,13 @@
 import { useEffect, useState } from "react";
 import { media, useNowPlaying } from "../platform/media";
-import { mockDiscord, mockPrivacy } from "../platform/services";
+import { mockApps, mockDiscord, mockPrivacy } from "../platform/services";
 import { showcase } from "./showcase-data";
+
+/** Mixer: the playing app moves to the next one in the list (tests the reorder). */
+function switchSource() {
+  const i = mockApps.findIndex((a) => a.media);
+  mockApps.forEach((a, j) => (a.media = j === (i + 1) % mockApps.length));
+}
 
 /**
  * Browser only: fakes a Windows 11 desktop so design and motion can be judged
@@ -47,6 +53,7 @@ export function DesktopMock() {
       {!showcase && <div className="fixed right-4 bottom-16 z-10 flex gap-2 rounded-xl bg-black/60 p-2 text-xs text-white backdrop-blur">
         <DevButton onClick={media.toggle}>{np?.isPlaying ? "Pause" : "Play"}</DevButton>
         <DevButton onClick={media.next}>Nächster Song</DevButton>
+        <DevButton onClick={switchSource}>Quelle wechseln</DevButton>
         <DevButton onClick={() => mockDiscord.toggleCall()}>Discord-Anruf</DevButton>
         <DevButton onClick={() => (mockPrivacy.mic = !mockPrivacy.mic)}>Mikro</DevButton>
         <DevButton onClick={() => (mockPrivacy.screen = !mockPrivacy.screen)}>Aufnahme</DevButton>

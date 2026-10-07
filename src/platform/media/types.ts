@@ -27,6 +27,8 @@ export interface MediaSource {
   previous(): void;
   /** Seeks to `position` seconds. */
   seek(position: number): void;
+  /** Brings the playing app (Spotify, the browser …) to the front. false = not found. */
+  openSource(): Promise<boolean>;
 }
 
 /** Current playback position, extrapolated from the last state. */

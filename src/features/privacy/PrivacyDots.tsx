@@ -1,12 +1,9 @@
-import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { springs } from "../../design/motion";
 import { t } from "../../i18n";
-import { fetchPrivacy, type PrivacyState } from "../../platform/services";
 import { settings } from "../../settings/store";
 import { discordState } from "../discord/store";
-
-const POLL_MS = 1500;
+import { privacy } from "./store";
 
 /**
  * Dots like on iPhone, right of the camera: green = mic or camera in use
@@ -15,20 +12,8 @@ const POLL_MS = 1500;
  */
 export function PrivacyDots() {
   const enabled = settings.use().privacyDots;
-  const [p, setP] = useState<PrivacyState>({ mic: false, camera: false, screen: false });
+  const p = privacy.use();
   const call = discordState.use().call;
-
-  useEffect(() => {
-    if (!enabled) return;
-    let alive = true;
-    const load = () => void fetchPrivacy().then((next) => alive && setP(next));
-    load();
-    const id = setInterval(load, POLL_MS);
-    return () => {
-      alive = false;
-      clearInterval(id);
-    };
-  }, [enabled]);
 
   const talk = p.mic || p.camera || (!!call && !call.mute);
   const dots = enabled ? [p.screen && "red", talk && "green"].filter((d): d is string => !!d) : [];

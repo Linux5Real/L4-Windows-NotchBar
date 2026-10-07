@@ -52,6 +52,11 @@ impl MediaState {
     fn app_id(&self) -> String {
         self.0.lock().unwrap().as_ref().map(|(np, _)| np.app_id.clone()).unwrap_or_default()
     }
+
+    /// App ID and title of the shown session (mixer, "open the app").
+    pub fn shown(&self) -> Option<(String, String)> {
+        self.0.lock().unwrap().as_ref().map(|(np, _)| (np.app_id.clone(), np.title.clone()))
+    }
 }
 
 /// The current state, with the position extrapolated to now.

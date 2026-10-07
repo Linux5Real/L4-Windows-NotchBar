@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Moon, MusicNoteSimple, SpeakerHigh, SpeakerLow, SpeakerNone, SpeakerSimpleSlash, Timer } from "@phosphor-icons/react";
+import { Eye, EyeSlash, Moon, MusicNoteSimple, SpeakerHigh, SpeakerLow, SpeakerNone, SpeakerSimpleSlash, Timer } from "@phosphor-icons/react";
 import { DiscordLogo } from "../../ui/brands";
 import { content, springs } from "../../design/motion";
+import { HeaderActions, HeaderButton } from "../../notch/header";
 import { navigate } from "../../notch/nav";
+import { togglePresentation, usePresenting } from "../privacy/store";
 import { useNowPlaying } from "../../platform/media";
 import { systemControls, type FocusState, type VolumeState } from "../../platform/services";
 import { useDiscordCall } from "../discord/store";
@@ -12,6 +14,7 @@ import { ARTWORK_LAYOUT_ID } from "../now-playing/NowPlayingView";
 import { formatClock, timer, useRemaining } from "../timer/store";
 import { describe, useForecast } from "../weather/store";
 import { settings } from "../../settings/store";
+import { formatTemp, formatTimeParts } from "../../lib/format";
 import { locale, t } from "../../i18n";
 
 /*
@@ -25,8 +28,14 @@ import { locale, t } from "../../i18n";
  * Like Control Center: an overview plus the two toggles you need all the time.
  */
 export function OverviewView() {
+  const presenting = usePresenting();
   return (
     <div className="flex h-full flex-col gap-2.5 px-4 pt-1 pb-3">
+      <HeaderActions>
+        <HeaderButton label={presenting ? t("Präsentationsmodus beenden") : t("Präsentationsmodus")} active={presenting} onClick={togglePresentation}>
+          {presenting ? <EyeSlash size={14} weight="fill" /> : <Eye size={14} weight="bold" />}
+        </HeaderButton>
+      </HeaderActions>
       <Header />
       <Activity />
       <div className="flex gap-2">
@@ -51,13 +60,16 @@ function Header() {
   const forecast = useForecast();
   const place = settings.use().weather;
   const weather = forecast && forecast !== "error" ? describe(forecast.current.code, forecast.current.day) : null;
-  const time = new Intl.DateTimeFormat(locale(), { hour: "2-digit", minute: "2-digit" }).format(now);
+  const { time, period } = formatTimeParts(now);
   const date = new Intl.DateTimeFormat(locale(), { weekday: "long", day: "numeric", month: "long" }).format(now);
 
   return (
     <div className="flex items-end justify-between">
       <div>
-        <div className="tabular text-[34px] leading-none font-semibold tracking-[-0.03em] text-label">{time}</div>
+        <div className="tabular text-[34px] leading-none font-semibold tracking-[-0.03em] text-label">
+          {time}
+          {period && <span className="ml-1 text-title font-semibold tracking-normal text-label-3">{period}</span>}
+        </div>
         <div className="mt-1 text-footnote text-label-3">{date}</div>
       </div>
       <button onClick={() => navigate("weather")} className="pressable flex flex-col items-end text-right" title={t("Wetter öffnen")}>
@@ -70,7 +82,7 @@ function Header() {
               animate={{ opacity: 1, filter: "blur(0px)", transition: content.enter }}
             >
               <weather.icon size={22} weight="fill" className="text-label" />
-              <span className="tabular text-[22px] leading-none font-semibold tracking-[-0.02em] text-label">{Math.round(forecast.current.temp)}°</span>
+              <span className="tabular text-[22px] leading-none font-semibold tracking-[-0.02em] text-label">{formatTemp(forecast.current.temp)}</span>
             </motion.div>
           ) : (
             <motion.div key="s" className="h-[22px] w-16 rounded-[6px] bg-fill-1" exit={{ opacity: 0, transition: content.exit }} />

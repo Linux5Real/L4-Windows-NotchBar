@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { isNative } from "./native";
+import bundledChangelog from "../changelog.json";
 import { showcase, showcaseCall, showcaseCash, showcaseDayChange, showcaseFileSizes, showcasePositions, showcaseRealized } from "../dev/showcase-data";
 
 /*
@@ -310,9 +311,16 @@ export interface UpdateHandle {
   install: (onProgress: (fraction: number) => void) => Promise<void>;
 }
 
+/** What changed in a version (`src/changelog.json`, newest first). */
+export interface ChangelogEntry {
+  version: string;
+  date: string;
+  items: { de: string; en: string }[];
+}
+
 /** In the browser, `?update` in the URL fakes an update for testing. */
 const mockUpdate: UpdateHandle = {
-  version: "0.2.0",
+  version: "1.3.0",
   install: async (onProgress) => {
     for (let i = 1; i <= 20; i++) {
       await new Promise((r) => setTimeout(r, 120));
@@ -323,7 +331,8 @@ const mockUpdate: UpdateHandle = {
 
 export const updater = {
   current: async (): Promise<string> => {
-    if (!isNative) return "0.1.0";
+    // Browser: newest bundled version; `?version=1.1.0` fakes an older one (changelog test).
+    if (!isNative) return new URLSearchParams(location.search).get("version") ?? bundledChangelog[0].version;
     const { getVersion } = await import("@tauri-apps/api/app");
     return getVersion();
   },
@@ -349,6 +358,25 @@ export const updater = {
     };
   },
 };
+
+/**
+ * Changelog of a newer version, before installing it: the same `src/changelog.json`
+ * from that release's tag (anonymous, like the update check). null = not reachable.
+ */
+export async function fetchChangelog(version: string): Promise<ChangelogEntry[] | null> {
+  if (!isNative) {
+    const mock = { de: "Beispiel: Neuerung aus der kommenden Version", en: "Example: something new in the upcoming version" };
+    return [{ version, date: new Date().toISOString().slice(0, 10), items: [mock, mock] }, ...bundledChangelog];
+  }
+  try {
+    const r = await fetch(`https://raw.githubusercontent.com/Linux5Real/L4-Windows-NotchBar/v${version}/src/changelog.json`, {
+      signal: AbortSignal.timeout(8000),
+    });
+    return r.ok ? ((await r.json()) as ChangelogEntry[]) : null;
+  } catch {
+    return null;
+  }
+}
 
 // ---------- Autostart ----------
 
@@ -533,6 +561,58 @@ export interface FocusState {
 
 const mockVolume: VolumeState = { level: 0.42, muted: false };
 const mockFocus: FocusState = { active: false, kind: "focus" };
+
+/** One program in the volume mixer (all its audio sessions together). */
+export interface AppVolume {
+  /** Lowercase exe name, e.g. "spotify.exe". */
+  id: string;
+  name: string;
+  /** PNG data URL of the program icon. */
+  icon: string | null;
+  /** 0..1 */
+  level: number;
+  muted: boolean;
+  /** Source of what is playing right now. */
+  media: boolean;
+}
+
+/** App icons for the browser mock (simple marks, only for design work and stills). */
+const svgIcon = (body: string) =>
+  `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">${body}</svg>`)}`;
+const discordPath =
+  "M20.317 4.3698a19.7913 19.7913 0 0 0-4.8851-1.5152.0741.0741 0 0 0-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 0 0-.0785-.037 19.7363 19.7363 0 0 0-4.8852 1.515.0699.0699 0 0 0-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 0 0 .0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 0 0 .0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 0 0-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 0 1-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 0 1 .0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 0 1 .0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 0 1-.0066.1276 12.2986 12.2986 0 0 1-1.873.8914.0766.0766 0 0 0-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 0 0 .0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 0 0 .0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 0 0-.0312-.0286ZM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189Zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z";
+
+const mockIcons = {
+  spotify: svgIcon(
+    `<circle cx="16" cy="16" r="15" fill="#1ed760"/><g fill="none" stroke="#000" stroke-linecap="round"><path d="M8.5 12.2c5-1.5 10.6-1.1 15 1.2" stroke-width="2.4"/><path d="M9.4 16.6c4.2-1.2 8.8-.8 12.5 1.1" stroke-width="2"/><path d="M10.2 20.6c3.4-.9 6.9-.6 9.8.9" stroke-width="1.7"/></g>`,
+  ),
+  chrome: svgIcon(
+    `<circle cx="16" cy="16" r="15" fill="#db4437"/><path d="M16 16 3.3 23.5A15 15 0 0 0 16 31z" fill="#0f9d58"/><path d="M16 16 16 31A15 15 0 0 0 28.7 8.5z" fill="#f4b400"/><path d="M16 16 3.3 23.5A15 15 0 0 1 3.3 8.5z" fill="#0f9d58"/><circle cx="16" cy="16" r="6.6" fill="#fff"/><circle cx="16" cy="16" r="5.2" fill="#4285f4"/>`,
+  ),
+  discord: svgIcon(`<rect width="32" height="32" rx="8" fill="#5865f2"/><g transform="translate(6 6) scale(.8333)"><path fill="#fff" d="${discordPath}"/></g>`),
+  steam: svgIcon(
+    `<circle cx="16" cy="16" r="15" fill="#1b2838"/><circle cx="20" cy="12.5" r="4.6" fill="none" stroke="#fff" stroke-width="1.8"/><circle cx="20" cy="12.5" r="2" fill="#fff"/><circle cx="11.5" cy="20.5" r="3.2" fill="#fff"/><path d="M11.5 20.5 20 12.5" stroke="#fff" stroke-width="2"/>`,
+  ),
+};
+
+/** Exported for the dev panel ("Quelle wechseln"). */
+export const mockApps: AppVolume[] = [
+  { id: "spotify.exe", name: "Spotify", icon: mockIcons.spotify, level: 0.72, muted: false, media: true },
+  { id: "chrome.exe", name: "Google Chrome", icon: mockIcons.chrome, level: 1, muted: false, media: false },
+  { id: "discord.exe", name: "Discord", icon: mockIcons.discord, level: 0.45, muted: false, media: false },
+  { id: "steam.exe", name: "Steam", icon: mockIcons.steam, level: 0.3, muted: true, media: false },
+];
+
+/** Volume per app, like the Windows volume mixer (src-tauri/src/mixer.rs). */
+export const mixer = {
+  list: (): Promise<AppVolume[]> => (isNative ? invoke<AppVolume[]>("mixer_list") : Promise.resolve(mockApps.map((a) => ({ ...a })))),
+  set: (id: string, patch: { level?: number; muted?: boolean }): Promise<void> => {
+    if (isNative) return invoke("mixer_set", { id, ...patch });
+    const app = mockApps.find((a) => a.id === id);
+    if (app) Object.assign(app, patch, patch.level !== undefined && patch.level > 0 && patch.muted === undefined ? { muted: false } : {});
+    return Promise.resolve();
+  },
+};
 
 export const systemControls = {
   volume: (): Promise<VolumeState> => (isNative ? invoke<VolumeState>("volume_get") : Promise.resolve({ ...mockVolume })),

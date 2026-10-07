@@ -75,5 +75,9 @@ export function createMockMedia(): MediaSource {
     next: () => load(index + 1),
     previous: () => (livePosition(state) > 3 ? set({ position: 0 }) : load(index - 1)),
     seek: (position) => set({ position: Math.max(0, Math.min(state.duration, position)) }),
+    openSource: () => {
+      console.info("[media] would bring the source app to the front");
+      return Promise.resolve(true);
+    },
   };
 }

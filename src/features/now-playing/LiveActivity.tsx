@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from "motion/react";
 import { MusicNoteSimple } from "@phosphor-icons/react";
-import { content } from "../../design/motion";
+import { artwork as artworkSwap, content } from "../../design/motion";
+import { useSmoothArtwork } from "./artwork";
 import type { NowPlaying } from "../../platform/media";
 import { Equalizer } from "./Equalizer";
 import { LiveEdge } from "../../notch/liveEdges";
@@ -28,19 +29,21 @@ export function LiveActivity({ np }: { np: NowPlaying }) {
 }
 
 /**
- * Track change: old and new cover sit on top of each other and blend with a blur bridge
- * (like the Dynamic Island), no hard swap, no gap.
+ * Track or app change: the new cover (already decoded) fades in on top of the old one
+ * with a blur bridge, the old one leaves a beat later. No cut, no gap, same calm
+ * pace as the accent color of the equalizer.
  */
-function LiveArtwork({ artwork }: { artwork: string | null }) {
+function LiveArtwork({ artwork: src }: { artwork: string | null }) {
+  const artwork = useSmoothArtwork(src);
   return (
     <div className="relative size-5 shrink-0">
       <AnimatePresence initial={false}>
         <motion.div
           key={artwork ?? "placeholder"}
           className="absolute inset-0 flex items-center justify-center"
-          initial={{ opacity: 0, transform: "scale(0.9)", filter: "blur(3px)" }}
-          animate={{ opacity: 1, transform: "scale(1)", filter: "blur(0px)", transition: { ...content.enter, delay: 0 } }}
-          exit={{ opacity: 0, transform: "scale(1.06)", filter: "blur(3px)", transition: content.enter }}
+          initial={{ opacity: 0, transform: "scale(0.94)", filter: "blur(3px)" }}
+          animate={{ opacity: 1, transform: "scale(1)", filter: "blur(0px)", transition: artworkSwap.enter }}
+          exit={{ opacity: 0, filter: "blur(2px)", transition: artworkSwap.exit }}
         >
           {artwork ? (
             <img src={artwork} alt="" draggable={false} className="size-5 rounded-[5px] object-cover" />

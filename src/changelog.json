@@ -18,6 +18,11 @@
       {
         "de": "Dünne Linie statt Notch als normale Ansicht – ein abgelaufener Timer klappt trotzdem auf",
         "en": "A thin line instead of the notch as your everyday look – a finished timer still pops open"
+      },
+      {
+        "de": "Als Nächstes kommt Version 2.0.0 mit vielen neuen Inhalten: Die kleine Notch zeigt dann viel mehr – Downloads und Updates, App-Status, den Fortschritt von Claude Code und anderen AI-CLIs, Widgets und vieles mehr",
+        "en": "Coming next: version 2.0.0 with lots of new things. The closed notch will show much more – downloads and updates, app status, progress of Claude Code and other AI CLIs, widgets and more",
+        "highlight": true
       }
     ]
   },

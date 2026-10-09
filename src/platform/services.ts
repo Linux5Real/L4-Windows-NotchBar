@@ -316,7 +316,8 @@ export interface UpdateHandle {
 export interface ChangelogEntry {
   version: string;
   date: string;
-  items: { de: string; en: string }[];
+  /** `highlight`: shown in bold and bright (e.g. an announcement). Older versions ignore it. */
+  items: { de: string; en: string; highlight?: boolean }[];
 }
 
 /** In the browser, `?update` in the URL fakes an update for testing. */

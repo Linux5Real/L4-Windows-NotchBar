@@ -16,6 +16,9 @@ export interface ClipItem {
   copiedAt: number;
 }
 
+/** all = clipboard tool on, text = only Ask needs the latest text, off = neither. */
+export type ClipboardMode = "all" | "text" | "off";
+
 export interface ClipPreview {
   src: string;
   width: number;
@@ -30,6 +33,8 @@ interface ClipboardSource {
   copy(id: number): Promise<void>;
   remove(id: number): void;
   clear(): void;
+  /** What gets recorded (from the enabled tools); drops entries the mode doesn't keep. */
+  mode(mode: ClipboardMode): void;
 }
 
 function createNative(): ClipboardSource {
@@ -52,6 +57,7 @@ function createNative(): ClipboardSource {
     preview: (id) => invoke<ClipPreview | null>("clipboard_preview", { id }),
     remove: (id) => void invoke("clipboard_delete", { id }),
     clear: () => void invoke("clipboard_clear"),
+    mode: (mode) => void invoke("clipboard_mode", { mode }),
   };
 }
 
@@ -90,6 +96,10 @@ function createMock(): ClipboardSource {
     },
     remove: (id) => set(items.filter((i) => i.id !== id)),
     clear: () => set([]),
+    mode(mode) {
+      const keep = (i: ClipItem) => mode === "all" || (mode === "text" && (i.kind === "text" || i.kind === "link"));
+      if (items.some((i) => !keep(i))) set(items.filter(keep));
+    },
   };
 }
 

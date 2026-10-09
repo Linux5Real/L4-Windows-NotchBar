@@ -83,9 +83,13 @@ export const timerActions = {
   },
 };
 
-// Watch for the end (one place for the whole app).
+// Watch for the end (one place for the whole app): one timeout at `endsAt`, no
+// polling while nothing runs.
 let ringTimeout: number | undefined;
-setInterval(() => {
+let endTimeout: number | undefined;
+let scheduledFor: number | null = null;
+
+function checkEnd() {
   const s = timer.get();
   if (s.endsAt !== null && remainingOf(s) <= 0) {
     const { sound, volume, duration: ring } = settings.get().alarm;
@@ -96,7 +100,23 @@ setInterval(() => {
     // Same length as in playAlarm ("until stopped" = at most 2 min).
     ringTimeout = window.setTimeout(() => ringing.set(false), (ring === -1 ? 120 : Math.max(3, ring)) * 1000);
   }
-}, 250);
+}
+
+function scheduleEnd() {
+  const { endsAt } = timer.get();
+  if (endsAt === scheduledFor) return;
+  window.clearTimeout(endTimeout);
+  scheduledFor = endsAt;
+  if (endsAt === null) return;
+  endTimeout = window.setTimeout(() => {
+    scheduledFor = null;
+    checkEnd();
+    // Woke too early (clock change): try again.
+    scheduleEnd();
+  }, Math.max(0, endsAt - Date.now()));
+}
+timer.subscribe(scheduleEnd);
+scheduleEnd();
 
 /** Remaining seconds, updated on every second boundary. */
 export function useRemaining(): number {

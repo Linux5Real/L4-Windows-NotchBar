@@ -33,6 +33,11 @@ export interface Settings {
     offset: number;
     /** Focus mode look: half transparent (as before) or shrunk to a thin line at the edge. */
     focusStyle: "dim" | "line";
+    /**
+     * Closed look outside focus mode: the notch, or a thin line (no music etc.; only a
+     * finished timer opens it into the notch until dismissed). Hover and click work as usual.
+     */
+    idleStyle: "notch" | "line";
   };
   /** Gaming mode: FPS + load in the closed notch: off, only in fullscreen, or always. */
   gaming: { mode: "off" | "fullscreen" | "on" };
@@ -90,7 +95,7 @@ const defaults: Settings = {
     },
   },
   weather: null,
-  display: { visibility: "always", monitor: null, offset: 0, focusStyle: "dim" },
+  display: { visibility: "always", monitor: null, offset: 0, focusStyle: "dim", idleStyle: "notch" },
   gaming: { mode: "off" },
   privacyDots: false,
   discord: { clientId: "" },

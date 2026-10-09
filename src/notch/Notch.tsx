@@ -3,7 +3,7 @@ import { AnimatePresence, motion, type Transition } from "motion/react";
 import { GearSix, PushPin, Selection } from "@phosphor-icons/react";
 import { content, springs } from "../design/motion";
 import { useNowPlaying } from "../platform/media";
-import { isNative, keyboardFocus, onNativeBlur, onNativeHover, onShortcut, onTrayOpen, setHitRect } from "../platform/native";
+import { isNative, keyboardFocus, onNativeBlur, onNativeHover, onShortcut, onTrayOpen, setHitRect, setMemoryLow } from "../platform/native";
 import { PrivacyDots } from "../features/privacy/PrivacyDots";
 import { FOCUS_CLICKS, focusMode, setFocusMode } from "./focus";
 import { useDragToMove } from "./drag";
@@ -20,9 +20,12 @@ import { update } from "../lib/update";
 import { findTab, settingsTab, tabs, type NotchTab } from "./tabs";
 import { holdOpen, pinned, togglePin, useNotchState, type NotchStatus } from "./useNotchState";
 import { t } from "../i18n";
+import { timer } from "../features/timer/store";
 
 /** If the notch was closed at most this long, it reopens on the last used tool. */
 const RESUME_MS = 60_000;
+/** Closed this long → lower WebView2's memory target. */
+const MEMORY_LOW_AFTER_MS = 20_000;
 
 export function Notch() {
   const { status, open, close, dismiss, toggle, onPointerEnter, onPointerLeave } = useNotchState();
@@ -30,6 +33,11 @@ export function Notch() {
   const { tools: toolSettings, display: displaySettings } = settings.use();
   // Focus mode as a line: no live activity, no dots, only the thin strip at the edge.
   const line = focus && displaySettings.focusStyle === "line";
+  // Line as the normal closed look: hover and click work as usual, but nothing shows
+  // while closed. Only a finished timer opens it into the notch, until dismissed.
+  const timerDone = timer.use().finished;
+  const idleLine = !focus && displaySettings.idleStyle === "line";
+  const alert = idleLine && timerDone;
   const visible = toolSettings.filter((t) => t.enabled).map((t) => findTab(t.id)).filter((t): t is NotchTab => !!t);
   const { tabId } = nav.use();
   // Hidden tool active (e.g. just disabled) → first visible one.
@@ -60,7 +68,9 @@ export function Notch() {
 
   const override = sizeOverride.use();
   const size = override?.tabId === tab.id ? override : tab.size;
-  const shape = line ? geometry.line : shapeFor(status, live.id, size);
+  // Live activity shown in the closed notch (the idle line only lets the timer alarm through).
+  const shownLive = line ? null : idleLine ? (alert ? "timer" : null) : live.id;
+  const shape = line || (idleLine && status === "closed" && !alert) ? geometry.line : shapeFor(status, shownLive, size);
   const sticky = useStickyHitZone(status, size.h);
   const transition = useTransitionFor(status, shape);
 
@@ -110,6 +120,14 @@ export function Notch() {
     if (status === "closed") keyboardFocus(false);
   }, [status]);
 
+  // Closed for a while → WebView2 may trim memory; back to normal on the first touch
+  // (peek), so the hover delay covers paging it back in before the notch opens.
+  useEffect(() => {
+    if (status !== "closed") return setMemoryLow(false);
+    const id = window.setTimeout(() => setMemoryLow(true), MEMORY_LOW_AFTER_MS);
+    return () => window.clearTimeout(id);
+  }, [status]);
+
   // 1–9 switches tools while open and not typing.
   useEffect(() => {
     if (status !== "open") return;
@@ -132,7 +150,9 @@ export function Notch() {
       <div
         ref={hitRef}
         data-notch-hit
-        className="pointer-events-auto px-4 pb-3"
+        // The line is meant to stay out of the way: only a hair of extra hit zone, so
+        // the cursor has to be on it (the normal notch gets the generous Fitts margin).
+        className={`pointer-events-auto ${shape === geometry.line ? "px-1 pb-1" : "px-4 pb-3"}`}
         style={{ minHeight: sticky.minHeight, cursor: drag.dragging ? "grabbing" : undefined }}
         onPointerMove={sticky.onPointerMove}
         onPointerDown={focus ? undefined : drag.onPointerDown}
@@ -142,8 +162,8 @@ export function Notch() {
         onClick={onClick}
       >
         <NotchShape geometry={shape} transition={transition} elevated={status === "open"}>
-          <LiveSlot id={status === "open" || line ? null : live.id} />
-          {!line && <PrivacyDots />}
+          <LiveSlot id={status === "open" ? null : shownLive} />
+          {!line && !idleLine && <PrivacyDots />}
 
           <AnimatePresence>
             {status === "open" && (

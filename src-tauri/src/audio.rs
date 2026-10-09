@@ -30,16 +30,23 @@ const RELEASE: f32 = 0.18;
 #[derive(Default)]
 pub struct AudioState {
     enabled: Arc<AtomicBool>,
+    /// The capture thread; parked while off, woken here when turned on.
+    worker: Mutex<Option<thread::Thread>>,
 }
 
 #[tauri::command]
 pub fn audio_levels(enabled: bool, state: State<'_, AudioState>) {
     state.enabled.store(enabled, Ordering::Relaxed);
+    if enabled {
+        if let Some(worker) = state.worker.lock().unwrap().as_ref() {
+            worker.unpark();
+        }
+    }
 }
 
 pub fn spawn(app: AppHandle, state: &AudioState) {
     let enabled = state.enabled.clone();
-    thread::spawn(move || {
+    let handle = thread::spawn(move || {
         let samples: Arc<Mutex<VecDeque<f32>>> = Arc::new(Mutex::new(VecDeque::with_capacity(FFT_SIZE * 2)));
         let failed = Arc::new(AtomicBool::new(false));
         let mut capture: Option<(Stream, Option<cpal::DeviceId>)> = None;
@@ -65,6 +72,9 @@ pub fn spawn(app: AppHandle, state: &AudioState) {
                     levels = [0.0; 4];
                     let _ = app.emit("audio://levels", levels);
                 }
+                // Sleep until `audio_levels(true)` instead of waking 40×/s. The timeout
+                // only guards against a missed unpark (turned on before `worker` was set).
+                thread::park_timeout(Duration::from_secs(1));
                 continue;
             }
 
@@ -118,6 +128,7 @@ pub fn spawn(app: AppHandle, state: &AudioState) {
             let _ = app.emit("audio://levels", levels);
         }
     });
+    *state.worker.lock().unwrap() = Some(handle.thread().clone());
 }
 
 /// Opens a loopback stream on the default output device. Writes mono samples to `samples`.

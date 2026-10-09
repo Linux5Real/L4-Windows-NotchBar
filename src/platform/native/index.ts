@@ -51,6 +51,11 @@ export function keyboardFocus(focus: boolean) {
   if (isNative) void invoke("keyboard_focus", { focus });
 }
 
+/** WebView2 memory target: low while the notch sits closed, normal otherwise. */
+export function setMemoryLow(low: boolean) {
+  if (isNative) void invoke("memory_low", { low });
+}
+
 /** Focus mode: window fully click-through (Rust only counts clicks to exit). */
 export function setPassthrough(on: boolean) {
   if (isNative) void invoke("set_passthrough", { on });

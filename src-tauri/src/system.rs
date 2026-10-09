@@ -1,5 +1,6 @@
 //! System stats for the Hardware tool: CPU, RAM, GPU (load + VRAM), ping.
-//! Only queried while the tool is open (the frontend polls ~1×/s).
+//! Polled ~1×/s while shown (Hardware tool open, gaming mode); in the background every
+//! 3 s with CPU and RAM only (`full = false`).
 //!
 //! - GPU load: performance counter "GPU Engine(*engtype_3D)", the same value as
 //!   Task Manager, vendor-independent (NVIDIA, AMD, Intel).
@@ -82,17 +83,21 @@ pub struct Stats {
 }
 
 #[tauri::command]
-pub fn system_stats(state: State<'_, SystemState>) -> Stats {
+pub fn system_stats(full: bool, state: State<'_, SystemState>) -> Stats {
     let mut p = state.0.lock().unwrap();
     p.sys.refresh_cpu_usage();
     p.sys.refresh_memory();
     if p.sys.cpus().is_empty() || p.sys.cpus()[0].brand().is_empty() {
         p.sys.refresh_cpu_list(sysinfo::CpuRefreshKind::nothing());
     }
-    *p.ping.wanted_at.lock().unwrap() = Instant::now();
+    // Background (notch closed): CPU and RAM only. The GPU counters walk every process's
+    // engines and the ping goes over the network, so both only run while shown.
+    if full {
+        *p.ping.wanted_at.lock().unwrap() = Instant::now();
+    }
 
-    let (gpu, gpu_mem_used) = p.gpu.as_ref().map(Gpu::read).unwrap_or((None, 0));
-    let ping = p.ping.ms.load(Ordering::Relaxed);
+    let (gpu, gpu_mem_used) = if full { p.gpu.as_ref().map(Gpu::read).unwrap_or((None, 0)) } else { (None, 0) };
+    let ping = if full { p.ping.ms.load(Ordering::Relaxed) } else { NO_PING };
     Stats {
         cpu: p.sys.global_cpu_usage(),
         cpu_name: p.sys.cpus().first().map(|c| clean_name(c.brand())).unwrap_or_default(),

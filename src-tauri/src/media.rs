@@ -111,14 +111,24 @@ pub fn spawn(app: AppHandle) {
         let mut last: Option<NowPlaying> = None;
         let mut last_sent_at = SystemTime::now();
         let mut artwork = Artwork { key: String::new(), since: Instant::now(), data: None };
+        // Requested once and reused: a new manager per poll is a cross-process
+        // round trip every 400 ms. Dropped (and requested again) on an error.
+        let mut manager: Option<SessionManager> = None;
 
         loop {
-            let Ok(manager) = SessionManager::RequestAsync().and_then(|op| op.join()) else {
+            if manager.is_none() {
+                manager = SessionManager::RequestAsync().and_then(|op| op.join()).ok();
+            }
+            let Some(manager_ref) = manager.as_ref() else {
                 thread::sleep(Duration::from_secs(2));
                 continue;
             };
             let shown = last.as_ref().map(|np| np.app_id.as_str()).unwrap_or_default();
-            let current = pick(&manager, shown).and_then(|session| read(&session, &mut artwork).ok());
+            let current = pick(manager_ref, shown).and_then(|session| read(&session, &mut artwork).ok());
+            // Nothing found: is the manager still alive (e.g. after an Explorer restart)?
+            if current.is_none() && manager_ref.GetSessions().is_err() {
+                manager = None;
+            }
 
             if changed(&last, &current, last_sent_at) {
                 last_sent_at = SystemTime::now();

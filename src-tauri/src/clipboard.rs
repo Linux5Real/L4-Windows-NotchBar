@@ -6,6 +6,7 @@
 
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::Mutex;
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -96,11 +97,42 @@ pub struct ClipboardState {
     /// doesn't create a duplicate.
     last_seq: Mutex<u32>,
     next_id: Mutex<u64>,
+    /// What gets recorded, see `Mode`. Set by the frontend from the enabled tools.
+    mode: AtomicU8,
 }
+
+/// Recording modes. `ALL` is the default, so nothing is missed before the frontend reports.
+/// Clipboard tool on: everything. Only Ask on (its quick actions use the latest text):
+/// text only, so screenshots are never encoded. Both off: nothing is read.
+const MODE_ALL: u8 = 0;
+const MODE_TEXT: u8 = 1;
+const MODE_OFF: u8 = 2;
 
 #[tauri::command]
 pub fn clipboard_list(state: State<'_, ClipboardState>) -> Vec<ClipItem> {
     items(&state)
+}
+
+/// `mode`: "all" | "text" | "off". Drops entries the new mode doesn't keep (frees the images).
+#[tauri::command]
+pub fn clipboard_mode(mode: &str, app: AppHandle, state: State<'_, ClipboardState>) {
+    let mode = match mode {
+        "off" => MODE_OFF,
+        "text" => MODE_TEXT,
+        _ => MODE_ALL,
+    };
+    if state.mode.swap(mode, Ordering::Relaxed) == mode {
+        return;
+    }
+    let before = state.entries.lock().unwrap().len();
+    state.entries.lock().unwrap().retain(|e| match mode {
+        MODE_OFF => false,
+        MODE_TEXT => matches!(e.content, Content::Text(_)),
+        _ => true,
+    });
+    if state.entries.lock().unwrap().len() != before {
+        emit(&app, &state);
+    }
 }
 
 #[tauri::command]
@@ -234,8 +266,15 @@ pub fn spawn(app: AppHandle) {
                 continue;
             }
 
+            let mode = state.mode.load(Ordering::Relaxed);
             // Another app may hold the clipboard briefly; try again next round.
-            let content = if formats.is_private() { Some(None) } else { read_content() };
+            let content = if mode == MODE_OFF || formats.is_private() {
+                Some(None)
+            } else if mode == MODE_TEXT {
+                read_text()
+            } else {
+                read_content()
+            };
             let Some(content) = content else { continue };
             *state.last_seq.lock().unwrap() = seq;
 
@@ -312,6 +351,12 @@ fn read_content() -> Option<Option<Content>> {
         (None, Some(img)) => StoredImage::new(img).map(Content::Image),
         (None, None) => None,
     })
+}
+
+/// Text only (no files, no image is read or encoded).
+fn read_text() -> Option<Option<Content>> {
+    let mut clipboard = Clipboard::new().ok()?;
+    Some(clipboard.get_text().ok().filter(|t| !t.trim().is_empty()).map(Content::Text))
 }
 
 fn is_url(text: &str) -> bool {

@@ -481,6 +481,25 @@ function Display() {
           </Button>
         </Row>
       )}
+      <Row
+        label={t("Geschlossen")}
+        hint={
+          d.idleStyle === "line"
+            ? t("Nur eine dünne Linie – Musik und Co. bleiben verborgen, ein abgelaufener Timer klappt trotzdem auf")
+            : t("Die Notch zeigt Musik, Timer und Co.")
+        }
+      >
+        <Segmented
+          id="idle-style"
+          size="sm"
+          value={d.idleStyle}
+          onChange={(idleStyle) => updateSettings((cur) => ({ display: { ...cur.display, idleStyle } }))}
+          options={[
+            { value: "notch", label: t("Notch") },
+            { value: "line", label: t("Linie") },
+          ]}
+        />
+      </Row>
       <Row label={t("Fokus-Modus")} hint={t("Klicks gehen durch. 3× schnell auf die Notch klicken schaltet um – oder im Tray-Menü.")}>
         <Switch label={t("Fokus-Modus")} checked={focus} onChange={setFocusMode} />
       </Row>

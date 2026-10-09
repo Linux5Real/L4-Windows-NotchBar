@@ -211,8 +211,9 @@ export interface SystemStats {
 }
 
 let mock = { cpu: 18, gpu: 32, ping: 14 };
-export function fetchSystem(): Promise<SystemStats> {
-  if (isNative) return invoke<SystemStats>("system_stats");
+/** `full = false`: CPU and RAM only (GPU and ping come back as null / 0). */
+export function fetchSystem(full: boolean): Promise<SystemStats> {
+  if (isNative) return invoke<SystemStats>("system_stats", { full });
   const walk = (v: number, step: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v + (Math.random() - 0.5) * step));
   mock = { cpu: walk(mock.cpu, 14, 3, 96), gpu: walk(mock.gpu, 18, 0, 99), ping: walk(mock.ping, 6, 8, 60) };
   const gb = 1024 ** 3;
@@ -221,11 +222,11 @@ export function fetchSystem(): Promise<SystemStats> {
     cpuName: "Ryzen 7 7800X3D 8-Core",
     memUsed: 13.4 * gb + Math.random() * 0.3 * gb,
     memTotal: 32 * gb,
-    gpu: mock.gpu,
+    gpu: full ? mock.gpu : null,
     gpuName: "GeForce RTX 4070 Ti",
-    gpuMemUsed: 2.9 * gb + (mock.gpu / 100) * 3 * gb,
+    gpuMemUsed: full ? 2.9 * gb + (mock.gpu / 100) * 3 * gb : 0,
     gpuMemTotal: 12 * gb,
-    ping: Math.round(mock.ping),
+    ping: full ? Math.round(mock.ping) : null,
   });
 }
 

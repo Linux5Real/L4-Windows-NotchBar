@@ -3,7 +3,7 @@ import { Cpu, WifiHigh, type Icon } from "@phosphor-icons/react";
 import { GpuIcon, RamIcon } from "../../ui/icons";
 import { content } from "../../design/motion";
 import { locale, t } from "../../i18n";
-import { HISTORY, system } from "./store";
+import { HISTORY, system, useSystemShown } from "./store";
 
 /*
  *   ┌──────────────────────────────────────────────────────────┐
@@ -17,6 +17,7 @@ import { HISTORY, system } from "./store";
  * the values from app start, so the history is already full when opened.
  */
 export function SystemView() {
+  useSystemShown();
   const { stats: s, history: h, tick } = system.use();
   if (!s) return null;
   const gb = (b: number) => (b / 1024 ** 3).toLocaleString(locale(), { maximumFractionDigits: 1 });

@@ -1,5 +1,27 @@
 [
   {
+    "version": "1.6.0",
+    "date": "2026-10-09",
+    "items": [
+      {
+        "de": "Deutlich weniger Arbeitsspeicher, wenn die Notch zu ist – etwa 80 statt 300 MB",
+        "en": "Far less memory while the notch is closed – about 80 instead of 300 MB"
+      },
+      {
+        "de": "Ruhiger im Hintergrund: kaum noch Prozessorlast im Leerlauf",
+        "en": "Quieter in the background: barely any processor use while idle"
+      },
+      {
+        "de": "Ausgeschaltete Tools wie Hardware oder Zwischenablage laufen nicht mehr im Hintergrund",
+        "en": "Turned-off tools like Hardware or Clipboard no longer run in the background"
+      },
+      {
+        "de": "Dünne Linie statt Notch als normale Ansicht – ein abgelaufener Timer klappt trotzdem auf",
+        "en": "A thin line instead of the notch as your everyday look – a finished timer still pops open"
+      }
+    ]
+  },
+  {
     "version": "1.5.0",
     "date": "2026-10-07",
     "items": [

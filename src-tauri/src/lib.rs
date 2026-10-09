@@ -10,6 +10,7 @@ mod drop;
 mod fps;
 mod hit_test;
 mod media;
+mod memory;
 mod mixer;
 mod privacy;
 pub mod secrets;
@@ -76,7 +77,9 @@ pub fn run() {
             hit_test::set_passthrough,
             media::media_get,
             media::media_control,
+            memory::memory_low,
             clipboard::clipboard_list,
+            clipboard::clipboard_mode,
             clipboard::clipboard_copy,
             clipboard::clipboard_delete,
             clipboard::clipboard_clear,

@@ -22,6 +22,10 @@ const SETTLE = 0.18;
 const PAUSE_DEBOUNCE_MS = 320;
 /** Keep the capture open briefly after pausing so resuming reacts instantly. */
 const RELEASE_CAPTURE_MS = 2000;
+/** Below one 60 Hz frame with room for timer jitter: 60 Hz draws every frame, 120 Hz
+ *  every 2nd (60 fps), 144 Hz every 2nd (72 fps), 165 Hz every 3rd (55 fps), 240 Hz
+ *  every 4th (60 fps). Always whole frames, so the pacing stays even. */
+const MIN_FRAME_MS = 13;
 
 /** Soft fake motion per bar (layered sine waves at different speeds). */
 function synthetic(i: number, t: number): number {
@@ -83,6 +87,12 @@ export function Equalizer({ playing, height = 12, tint = "bg-accent" }: { playin
     let quiet = 0;
 
     const tick = (now: number) => {
+      // Cap at ~60 fps: on 120/144/240 Hz screens every 2nd (3rd) frame, evenly
+      // paced. Levels only arrive 40×/s, more frames don't add motion.
+      if (now - last < MIN_FRAME_MS) {
+        frame = requestAnimationFrame(tick);
+        return;
+      }
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
       const t = now / 1000;

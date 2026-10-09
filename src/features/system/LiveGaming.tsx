@@ -4,7 +4,7 @@ import { content } from "../../design/motion";
 import { t } from "../../i18n";
 import { fps, useFpsPolling } from "./gaming";
 import { levelColor } from "./SystemView";
-import { system } from "./store";
+import { system, useSystemShown } from "./store";
 import { LiveEdge } from "../../notch/liveEdges";
 
 /*
@@ -17,6 +17,7 @@ import { LiveEdge } from "../../notch/liveEdges";
  */
 export function LiveGaming() {
   useFpsPolling();
+  useSystemShown();
   const f = fps.use();
   const { stats } = system.use();
   const mem = stats ? (stats.memUsed / stats.memTotal) * 100 : null;

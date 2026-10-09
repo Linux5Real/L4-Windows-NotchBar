@@ -7,6 +7,7 @@ import { Notch } from "./notch/Notch";
 import { DesktopMock } from "./dev/DesktopMock";
 import { isNative } from "./platform/native";
 import { startDropListener } from "./platform/drop";
+import { clipboard } from "./platform/clipboard";
 import { settings } from "./settings/store";
 import { applyDisplay } from "./notch/drag";
 import { startFocusMode } from "./notch/focus";
@@ -37,6 +38,18 @@ const syncDisplay = () => {
 };
 syncDisplay();
 settings.subscribe(syncDisplay);
+
+// Clipboard history only records what an enabled tool uses (Ask: the latest text).
+let lastClipMode = "";
+const syncClipboardMode = () => {
+  const on = (id: string) => settings.get().tools.some((t) => t.id === id && t.enabled);
+  const mode = on("clipboard") ? "all" : on("ask") ? "text" : "off";
+  if (mode === lastClipMode) return;
+  lastClipMode = mode;
+  clipboard.mode(mode);
+};
+syncClipboardMode();
+settings.subscribe(syncClipboardMode);
 
 // Language: update the tray menu in Rust and set the lang attribute.
 let lastLang = "";

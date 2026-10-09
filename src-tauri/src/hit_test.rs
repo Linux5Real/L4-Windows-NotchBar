@@ -79,6 +79,11 @@ pub fn set_pinned(pinned: bool, state: State<'_, HitState>) {
 
 /// ~60 Hz is plenty: hover delays are 180–220 ms anyway.
 const POLL: Duration = Duration::from_millis(16);
+/// Cursor far away from the notch (and no button held): poll slower. Reaching the
+/// notch from `FAR` px away within one slow poll would take a very fast flick, and
+/// the next poll near the notch is fast again.
+const POLL_FAR: Duration = Duration::from_millis(50);
+const FAR: f64 = 160.0;
 /// Leaving focus mode: this many clicks on the notch, each at most `CLICK_GAP` apart.
 const EXIT_CLICKS: u32 = 3;
 const CLICK_GAP: Duration = Duration::from_millis(450);
@@ -93,9 +98,11 @@ pub fn spawn(app: AppHandle, window: WebviewWindow) {
         let mut drag_from: Option<(f64, f64)> = None;
         let mut drag_active = false;
         let (mut clicks, mut last_click) = (0u32, Instant::now());
+        let mut far = false;
 
         loop {
-            thread::sleep(POLL);
+            thread::sleep(if far { POLL_FAR } else { POLL });
+            far = false;
             let state = app.state::<HitState>();
             if state.refresh.swap(false, Ordering::Relaxed) {
                 last_ignore = None;
@@ -111,6 +118,11 @@ pub fn spawn(app: AppHandle, window: WebviewWindow) {
             let rect = *state.rect.lock().unwrap();
             let dragging = unsafe { GetAsyncKeyState(VK_LBUTTON.0 as i32) } as u16 & 0x8000 != 0;
             let passthrough = state.passthrough.load(Ordering::Relaxed);
+            // Edge distance to the hit zone; a held button keeps the fast poll (drags,
+            // triple click in focus mode).
+            let dx = (rect.x - x).max(x - (rect.x + rect.w)).max(0.0);
+            let dy = (rect.y - y).max(y - (rect.y + rect.h)).max(0.0);
+            far = !dragging && !was_down && dx.hypot(dy) > FAR;
 
             if passthrough {
                 // Only count clicks (button edges), never swallow them.

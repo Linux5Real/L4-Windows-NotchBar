@@ -70,7 +70,16 @@ export function Notch() {
   const size = override?.tabId === tab.id ? override : tab.size;
   // Live activity shown in the closed notch (the idle line only lets the timer alarm through).
   const shownLive = line ? null : idleLine ? (alert ? "timer" : null) : live.id;
-  const shape = line || (idleLine && status === "closed" && !alert) ? geometry.line : shapeFor(status, shownLive, size);
+  // The idle line never passes through the small notch: line → slightly bigger line on
+  // hover → open, and straight back to the line on close.
+  const lineIdle = idleLine && !alert;
+  const shape =
+    line || (lineIdle && status === "closed")
+      ? geometry.line
+      : lineIdle && status === "peek"
+        ? geometry.linePeek
+        : shapeFor(status, shownLive, size);
+  const tightHit = shape === geometry.line || shape === geometry.linePeek;
   const sticky = useStickyHitZone(status, size.h);
   const transition = useTransitionFor(status, shape);
 
@@ -152,7 +161,7 @@ export function Notch() {
         data-notch-hit
         // The line is meant to stay out of the way: only a hair of extra hit zone, so
         // the cursor has to be on it (the normal notch gets the generous Fitts margin).
-        className={`pointer-events-auto ${shape === geometry.line ? "px-1 pb-1" : "px-4 pb-3"}`}
+        className={`pointer-events-auto ${tightHit ? "px-1 pb-1" : "px-4 pb-3"}`}
         style={{ minHeight: sticky.minHeight, cursor: drag.dragging ? "grabbing" : undefined }}
         onPointerMove={sticky.onPointerMove}
         onPointerDown={focus ? undefined : drag.onPointerDown}

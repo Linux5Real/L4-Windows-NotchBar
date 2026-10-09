@@ -34,6 +34,8 @@ export const geometry = {
   gaming: { w: 436, h: 30, r: 10, ear: 6 },
   /** Focus mode "line": a thin strip at the screen edge, just enough to find it again. */
   line: { w: 150, h: 5, r: 2.5, ear: 3 },
+  /** Hover on the line: it stays a line, just a touch bigger, then opens straight away. */
+  linePeek: { w: 166, h: 7, r: 3.5, ear: 3.5 },
 } satisfies Record<string, NotchGeometry>;
 
 /** Open state: size comes from the active tab, radii are fixed. */

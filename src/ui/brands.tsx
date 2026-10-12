@@ -11,7 +11,7 @@ export type BrandId = "claude" | "codex" | "gemini" | "cursor" | "grok";
 export const brandName: Record<BrandId, string> = {
   claude: "Claude",
   codex: "ChatGPT",
-  gemini: "Gemini",
+  gemini: "Antigravity",
   cursor: "Cursor",
   grok: "Grok",
 };

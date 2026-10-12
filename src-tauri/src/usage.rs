@@ -8,41 +8,37 @@
 //!   doesn't query right away and never shows an empty error.
 //! - ChatGPT (Codex CLI): live `chatgpt.com/backend-api/wham/usage` with `~/.codex/auth.json`,
 //!   fallback: last `rate_limits` entry in `~/.codex/sessions/**.jsonl`.
-//! - Gemini (Gemini CLI): Code Assist quota (`retrieveUserQuota`) with the Google login
-//!   from `~/.gemini/oauth_creds.json`. Expired tokens are only refreshed in memory.
+//! - Antigravity (`agy` CLI): asks the CLI itself (`agy -p /usage --output-format json`,
+//!   tested with agy 1.3.3), so its login is never read here. Starting the CLI takes a
+//!   few seconds → 5 min cache.
 //! - Cursor: monthly requests via `cursor.com/api/usage` with the Cursor app's login.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use base64::Engine;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::Value;
 use tauri::{AppHandle, Manager, State};
 
 /// Minimum interval between real queries per provider.
 fn cache_for(id: &str) -> Duration {
     match id {
-        "claude" => Duration::from_secs(5 * 60),
+        "claude" | "gemini" => Duration::from_secs(5 * 60),
         _ => Duration::from_secs(2 * 60),
     }
 }
 const BACKOFF_429: Duration = Duration::from_secs(10 * 60);
-
-/// Public OAuth client data of the Gemini CLI (it's in the CLI's open-source code;
-/// "installed app" clients have no real secret).
-const GEMINI_CLIENT_ID: &str = "681255809395-oo8ft2oprdrnp9e3aqf6av3hmdib135j.apps.googleusercontent.com";
-const GEMINI_CLIENT_SECRET: &str = "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";
+/// agy answers in about 6 s; after this it is killed.
+const AGY_TIMEOUT: Duration = Duration::from_secs(40);
 
 #[derive(Default)]
 pub struct UsageState {
     /// Last result per provider + earliest time (Unix ms) of the next real query.
     cache: Mutex<HashMap<String, (u64, Provider)>>,
     loaded: Mutex<bool>,
-    /// Refreshed Gemini token (valid ~1 h).
-    gemini_token: Mutex<Option<(String, u64)>>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -88,7 +84,7 @@ pub async fn usage_fetch(providers: Vec<String>, app: AppHandle, state: State<'_
         let result = match id.as_str() {
             "claude" => fetch_claude().await,
             "codex" => fetch_codex().await,
-            "gemini" => fetch_gemini(&state).await,
+            "gemini" => fetch_gemini().await,
             _ => fetch_cursor().await,
         };
         let (provider, wait) = match (result, cached) {
@@ -274,95 +270,94 @@ fn window_kind(minutes: u64) -> &'static str {
     }
 }
 
-// ---------- Gemini ----------
+// ---------- Antigravity ----------
 
-async fn fetch_gemini(state: &UsageState) -> Result<Provider, Fail> {
-    let token = gemini_token(state).await?;
-    let http = client()?;
-    let code_assist = "https://cloudcode-pa.googleapis.com/v1internal";
+async fn fetch_gemini() -> Result<Provider, Fail> {
+    let stdout = tauri::async_runtime::spawn_blocking(run_agy).await.map_err(|_| Fail::new("failed"))??;
+    Ok(Provider { id: "gemini".into(), plan: None, windows: parse_agy_usage(&stdout)?, error: None, updated_at: now_ms() })
+}
 
-    let res = http
-        .post(format!("{code_assist}:loadCodeAssist"))
-        .bearer_auth(&token)
-        .json(&json!({ "metadata": { "ideType": "IDE_UNSPECIFIED", "platform": "PLATFORM_UNSPECIFIED", "pluginType": "GEMINI" } }))
-        .send()
-        .await
-        .map_err(|_| Fail::new("offline"))?;
-    check(&res)?;
-    let info: Value = res.json().await.map_err(|_| Fail::new("failed"))?;
-    let project = info["cloudaicompanionProject"].as_str().or(info["cloudaicompanionProject"]["id"].as_str()).map(str::to_string);
-    let plan = info["currentTier"]["name"].as_str().map(|s| s.replace("Gemini Code Assist", "").trim().to_string()).filter(|s| !s.is_empty());
+/// Runs the CLI's own `/usage` and returns what it prints. `agy` from PATH, otherwise
+/// from its default install folder.
+fn run_agy() -> Result<String, Fail> {
+    use std::io::Read;
+    use std::process::{Command, Stdio};
 
-    let res = http
-        .post(format!("{code_assist}:retrieveUserQuota"))
-        .bearer_auth(&token)
-        .json(&json!({ "project": project }))
-        .send()
-        .await
-        .map_err(|_| Fail::new("offline"))?;
-    check(&res)?;
-    let body: Value = res.json().await.map_err(|_| Fail::new("failed"))?;
-    let mut windows: Vec<Window> = body["buckets"]
-        .as_array()
-        .map(|b| {
-            b.iter()
-                .filter_map(|bucket| {
-                    let remaining = bucket["remainingFraction"].as_f64()?;
-                    let model = bucket["modelId"].as_str().unwrap_or("Gemini");
-                    Some(Window {
-                        kind: format!("model:{}", pretty_model(model)),
-                        used_percent: ((1.0 - remaining) * 100.0).clamp(0.0, 100.0),
-                        resets_at: bucket["resetTime"].as_str().and_then(parse_iso_ms),
-                        window_secs: Some(86_400),
-                    })
-                })
-                .collect()
+    let installed = std::env::var_os("LOCALAPPDATA").map(|dir| PathBuf::from(dir).join("agy").join("bin").join("agy.exe"));
+    let mut child = [Some(PathBuf::from("agy")), installed]
+        .into_iter()
+        .flatten()
+        .find_map(|exe| {
+            let mut cmd = Command::new(exe);
+            cmd.args(["-p", "/usage", "--output-format", "json", "--print-timeout", "30s"])
+                // agy treats the working directory as its workspace; keep it out of ours.
+                .current_dir(std::env::temp_dir())
+                .stdin(Stdio::null())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::null());
+            crate::convert::hide_console(&mut cmd);
+            cmd.spawn().ok()
         })
-        .unwrap_or_default();
-    // Merge variants of the same model (the tightest counts). Show at most three.
-    windows.sort_by(|a, b| b.used_percent.total_cmp(&a.used_percent));
-    let mut seen = std::collections::HashSet::new();
-    windows.retain(|w| seen.insert(w.kind.clone()));
-    windows.truncate(3);
+        .ok_or("not-found")?;
+
+    // Read while waiting, so a full pipe can't block the CLI.
+    let mut pipe = child.stdout.take().ok_or("failed")?;
+    let reader = std::thread::spawn(move || {
+        let mut text = String::new();
+        let _ = pipe.read_to_string(&mut text);
+        text
+    });
+    let deadline = Instant::now() + AGY_TIMEOUT;
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) if status.success() => break,
+            Ok(None) if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(100)),
+            Ok(None) => {
+                let _ = child.kill();
+                return Err("failed".into());
+            }
+            _ => return Err("failed".into()),
+        }
+    }
+    reader.join().map_err(|_| Fail::new("failed"))
+}
+
+/// Output of `agy -p /usage --output-format json` → limit windows. Antigravity has two
+/// groups with a 5-hour and a weekly limit each: Gemini models keep the plain kinds,
+/// the other one (Claude and GPT, bucket IDs "3p-…") gets the "-3p" suffix.
+fn parse_agy_usage(stdout: &str) -> Result<Vec<Window>, Fail> {
+    let body: Value = serde_json::from_str(stdout.trim()).map_err(|_| Fail::new("failed"))?;
+    if body["status"] != "SUCCESS" {
+        return Err("failed".into());
+    }
+    let mut windows: Vec<Window> = body["command"]["data"]["groups"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .flat_map(|group| group["buckets"].as_array().into_iter().flatten())
+        .filter_map(|bucket| {
+            let remaining = bucket["remaining_fraction"].as_f64()?;
+            let (kind, secs) = match bucket["window"].as_str()? {
+                "5h" => ("session", 5 * 3600),
+                "weekly" => ("weekly", 7 * 86_400),
+                _ => return None,
+            };
+            let gemini = bucket["id"].as_str().is_some_and(|id| id.starts_with("gemini"));
+            Some(Window {
+                kind: if gemini { kind.into() } else { format!("{kind}-3p") },
+                used_percent: ((1.0 - remaining) * 100.0).clamp(0.0, 100.0),
+                resets_at: bucket["reset_time"].as_str().and_then(parse_iso_ms),
+                window_secs: Some(secs),
+            })
+        })
+        .collect();
+    // Gemini first, session before week (agy lists the week first). One row per kind.
+    windows.sort_by_key(|w| (w.kind.ends_with("-3p"), w.kind.starts_with("weekly")));
+    windows.dedup_by(|a, b| a.kind == b.kind);
     if windows.is_empty() {
         return Err("failed".into());
     }
-    Ok(Provider { id: "gemini".into(), plan, windows, error: None, updated_at: now_ms() })
-}
-
-/// Valid Gemini CLI access token; refreshed in memory if expired (the file is untouched).
-async fn gemini_token(state: &UsageState) -> Result<String, Fail> {
-    let creds = read_json(&home().join(".gemini").join("oauth_creds.json")).ok_or("not-found")?;
-    let expiry = creds["expiry_date"].as_u64().unwrap_or(0);
-    if let Some(token) = creds["access_token"].as_str().filter(|_| expiry > now_ms() + 60_000) {
-        return Ok(token.to_string());
-    }
-    if let Some((token, exp)) = state.gemini_token.lock().unwrap().clone() {
-        if exp > now_ms() + 60_000 {
-            return Ok(token);
-        }
-    }
-    let refresh = creds["refresh_token"].as_str().ok_or("not-signed-in")?;
-    let res = client()?
-        .post("https://oauth2.googleapis.com/token")
-        .header("Content-Type", "application/x-www-form-urlencoded")
-        .body(format!("client_id={GEMINI_CLIENT_ID}&client_secret={GEMINI_CLIENT_SECRET}&refresh_token={}&grant_type=refresh_token", url_encode(refresh)))
-        .send()
-        .await
-        .map_err(|_| Fail::new("offline"))?;
-    if !res.status().is_success() {
-        return Err("expired".into());
-    }
-    let body: Value = res.json().await.map_err(|_| Fail::new("failed"))?;
-    let token = body["access_token"].as_str().ok_or("expired")?.to_string();
-    let exp = now_ms() + body["expires_in"].as_u64().unwrap_or(3000) * 1000;
-    *state.gemini_token.lock().unwrap() = Some((token.clone(), exp));
-    Ok(token)
-}
-
-/// "gemini-2.5-pro" → "2.5 Pro", "gemini-2.5-flash-lite" → "2.5 Flash Lite".
-fn pretty_model(id: &str) -> String {
-    id.trim_start_matches("models/").trim_start_matches("gemini-").split('-').map(capitalize).collect::<Vec<_>>().join(" ")
+    Ok(windows)
 }
 
 // ---------- Cursor ----------
@@ -452,10 +447,6 @@ fn save_disk_cache(app: &AppHandle, state: &UsageState) {
 
 // ---------- Helpers ----------
 
-fn url_encode(s: &str) -> String {
-    s.bytes().map(|b| if b.is_ascii_alphanumeric() || b"-._~".contains(&b) { (b as char).to_string() } else { format!("%{b:02X}") }).collect()
-}
-
 fn read_json(path: &Path) -> Option<Value> {
     std::fs::read(path).ok().and_then(|b| serde_json::from_slice(&b).ok())
 }
@@ -530,7 +521,42 @@ fn parse_iso_ms(s: &str) -> Option<u64> {
 
 #[cfg(test)]
 mod tests {
-    use super::{find_jwt_after, parse_iso_ms, pretty_model};
+    use super::{find_jwt_after, parse_agy_usage, parse_iso_ms};
+
+    /// Real output of agy 1.3.3, only the fractions edited.
+    const AGY_USAGE: &str = r#"{"conversation_id":"","status":"SUCCESS","response":"Gemini Models\tWeekly Limit Remaining\t50%\t2026-10-19T09:39:00Z\nGemini Models\tFive Hour Limit Remaining\t75%\t2026-10-12T23:31:25Z\nClaude and GPT models\tWeekly Limit Remaining\t100%\t2026-10-19T18:31:25Z\nClaude and GPT models\tFive Hour Limit Remaining\t25%\t2026-10-12T23:31:25Z\n","duration_seconds":0,"num_turns":0,"usage":{"input_tokens":0,"output_tokens":0,"thinking_tokens":0,"cache_read_tokens":0,"total_tokens":0},"command":{"name":"usage","data":{"description":"Within each group, models share a weekly limit and a 5-hour limit.","groups":[{"name":"Gemini Models","description":"Models within this group: Gemini Flash, Gemini Pro","buckets":[{"id":"gemini-weekly","name":"Weekly Limit Remaining","window":"weekly","remaining_fraction":0.5,"reset_time":"2026-10-19T09:39:00Z"},{"id":"gemini-5h","name":"Five Hour Limit Remaining","window":"5h","remaining_fraction":0.75,"reset_time":"2026-10-12T23:31:25Z"}]},{"name":"Claude and GPT models","description":"Models within this group: Claude Opus, Claude Sonnet, GPT-OSS","buckets":[{"id":"3p-weekly","name":"Weekly Limit Remaining","window":"weekly","remaining_fraction":1,"reset_time":"2026-10-19T18:31:25Z"},{"id":"3p-5h","name":"Five Hour Limit Remaining","window":"5h","remaining_fraction":0.25,"reset_time":"2026-10-12T23:31:25Z"}]}]}}}"#;
+
+    /// Gemini first, session before week; remaining → used.
+    #[test]
+    fn agy_usage() {
+        let windows = parse_agy_usage(AGY_USAGE).map_err(|e| e.code).unwrap();
+        let got: Vec<_> = windows.iter().map(|w| (w.kind.as_str(), w.used_percent, w.resets_at, w.window_secs)).collect();
+        assert_eq!(
+            got,
+            [
+                ("session", 25.0, Some(1_791_847_885_000), Some(18_000)),
+                ("weekly", 50.0, Some(1_792_402_740_000), Some(604_800)),
+                ("session-3p", 75.0, Some(1_791_847_885_000), Some(18_000)),
+                ("weekly-3p", 0.0, Some(1_792_434_685_000), Some(604_800)),
+            ]
+        );
+    }
+
+    /// Live, needs a signed-in agy on this PC: `cargo test --lib agy_live -- --ignored`
+    #[test]
+    #[ignore]
+    fn agy_live() {
+        let provider = tauri::async_runtime::block_on(super::fetch_gemini()).map_err(|e| e.code).unwrap();
+        assert!(provider.windows.iter().any(|w| w.kind == "session"));
+    }
+
+    #[test]
+    fn agy_usage_errors() {
+        let code = |s: &str| parse_agy_usage(s).map(|w| w.len()).map_err(|e| e.code);
+        assert_eq!(code("not json"), Err("failed".into()));
+        assert_eq!(code(r#"{"conversation_id":"","status":"ERROR","response":"not signed in"}"#), Err("failed".into()));
+        assert_eq!(code(r#"{"status":"SUCCESS","command":{"name":"usage","data":{"groups":[]}}}"#), Err("failed".into()));
+    }
 
     #[test]
     fn iso() {
@@ -538,12 +564,6 @@ mod tests {
         assert_eq!(parse_iso_ms("2026-10-04T12:00:00Z"), Some(1_791_115_200_000));
         assert_eq!(parse_iso_ms("2026-10-04T14:00:00+02:00"), Some(1_791_115_200_000));
         assert_eq!(parse_iso_ms("2026-10-04T12:00:00.500Z"), Some(1_791_115_200_500));
-    }
-
-    #[test]
-    fn models() {
-        assert_eq!(pretty_model("gemini-2.5-pro"), "2.5 Pro");
-        assert_eq!(pretty_model("gemini-2.5-flash-lite"), "2.5 Flash Lite");
     }
 
     #[test]
@@ -556,10 +576,9 @@ mod tests {
 /// For backend tests without the Tauri runtime: Claude + ChatGPT, error codes/counters only.
 #[doc(hidden)]
 pub async fn probe_for_test() -> Vec<(String, Result<usize, String>)> {
-    let state = UsageState::default();
     vec![
         ("claude".into(), fetch_claude().await.map(|p| p.windows.len()).map_err(|e| e.code)),
         ("codex".into(), fetch_codex().await.map(|p| p.windows.len()).map_err(|e| e.code)),
-        ("gemini".into(), fetch_gemini(&state).await.map(|p| p.windows.len()).map_err(|e| e.code)),
+        ("gemini".into(), fetch_gemini().await.map(|p| p.windows.len()).map_err(|e| e.code)),
     ]
 }

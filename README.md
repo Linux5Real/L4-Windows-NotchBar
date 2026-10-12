@@ -44,7 +44,7 @@ Make it yours: reorder or hide any tool, move the notch, pick the monitor, hide 
 ### Services
 
 - **Ask** is a chat with Claude, ChatGPT, OpenRouter or any OpenAI-compatible endpoint, with streaming and adjustable reasoning effort.
-- **AI usage** shows your subscription limits for Claude, ChatGPT, Gemini and Cursor.
+- **AI usage** shows your subscription limits for Claude, ChatGPT, Antigravity and Cursor.
 - **Weather** gives current conditions and a 7-day forecast through Open-Meteo. No API key needed.
 - **Portfolio** connects to Trading 212 and shows profit and loss and a history chart, live or in demo mode. The app only reads, it never trades.
 - **Discord** shows your current voice call with speaking members and buttons for mute, deafen and hang up. In the closed Notch, a green equalizer plays while someone talks.
@@ -110,7 +110,7 @@ Every integration is optional. Tools you don't connect simply stay out of your w
 
 **Ask (AI chat).** Under **AI**, choose a provider (Claude, ChatGPT, OpenRouter or a custom endpoint) and paste your API key. For a custom endpoint, enter the base URL (usually ending in `/v1`) and a model ID. The reasoning effort is set there too.
 
-**AI usage.** Nothing to enter. If you are signed in to Claude Code, the Codex CLI, the Gemini CLI or Cursor on this PC, the Notch reads their existing local login and shows your limits.
+**AI usage.** Nothing to enter. If you are signed in to Claude Code, the Codex CLI, the Antigravity CLI (`agy`) or Cursor on this PC, the Notch reads their existing local login and shows your limits. For Antigravity it asks the CLI itself and never touches its login.
 
 **Portfolio.** In Trading 212 go to Settings, API (Beta) and create a key with permission for account data and portfolio. Nothing more is required. Paste key and secret under **Connections** and choose live or demo account.
 

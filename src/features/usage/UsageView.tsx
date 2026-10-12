@@ -19,6 +19,8 @@ const windowLabel: Record<string, string> = {
   weekly: "Woche",
   "weekly-opus": "Woche · Opus",
   "weekly-sonnet": "Woche · Sonnet",
+  "session-3p": "Session · Claude/GPT",
+  "weekly-3p": "Woche · Claude/GPT",
   daily: "Heute",
   monthly: "Monat",
 };

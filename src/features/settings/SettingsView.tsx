@@ -676,7 +676,7 @@ function Alarm() {
 const usageSources: { id: UsageId | "grok"; hint: string; available: boolean }[] = [
   { id: "claude", hint: "Über die Anmeldung von Claude Code", available: true },
   { id: "codex", hint: "Über die Anmeldung der Codex CLI", available: true },
-  { id: "gemini", hint: "Über die Anmeldung der Gemini CLI", available: true },
+  { id: "gemini", hint: "Über die Anmeldung der Antigravity CLI", available: true },
   { id: "cursor", hint: "Über die Anmeldung der Cursor-App", available: true },
   { id: "grok", hint: "xAI bietet keinen Abruf der Abo-Limits", available: false },
 ];

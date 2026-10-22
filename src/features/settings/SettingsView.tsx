@@ -18,13 +18,41 @@ import {
   type Icon,
 } from "@phosphor-icons/react";
 import { content, fade, springs } from "../../design/motion";
-import { alarmSounds, playAlarm, stopAlarm, type AlarmDuration } from "../../lib/sound";
+import {
+  alarmSounds,
+  playAlarm,
+  stopAlarm,
+  type AlarmDuration,
+} from "../../lib/sound";
 import { nav } from "../../notch/nav";
 import { tabs } from "../../notch/tabs";
-import { autostart, display, secrets, unlockFps, type ChangelogEntry, type MonitorInfo, type SecretName, type UsageId } from "../../platform/services";
-import { settings, updateAsk, updateSettings, type AskProvider } from "../../settings/store";
+import {
+  autostart,
+  display,
+  secrets,
+  unlockFps,
+  type ChangelogEntry,
+  type MonitorInfo,
+  type SecretName,
+  type UsageId,
+} from "../../platform/services";
+import {
+  settings,
+  updateAsk,
+  updateSettings,
+  type AskProvider,
+} from "../../settings/store";
 import { BrandLogo, brandName } from "../../ui/brands";
-import { Button, Group, Row, Segmented, Select, Slider, Switch, TextField } from "../../ui/controls";
+import {
+  Button,
+  Group,
+  Row,
+  Segmented,
+  Select,
+  Slider,
+  Switch,
+  TextField,
+} from "../../ui/controls";
 import { effortLevels, providerInfo } from "../ask/providers";
 import { discordState, reconnectDiscord } from "../discord/store";
 import { fps } from "../system/gaming";
@@ -33,7 +61,13 @@ import { VaultSettings } from "../vault/VaultSettings";
 import { detectPlace } from "../weather/store";
 import { focusMode, setFocusMode } from "../../notch/focus";
 import { checkForUpdate, installUpdate, update } from "../../lib/update";
-import { between, changelog, itemText, markSeen, useUnseen } from "../../lib/changelog";
+import {
+  between,
+  changelog,
+  itemText,
+  markSeen,
+  useUnseen,
+} from "../../lib/changelog";
 import { privacy, togglePresentation, usePresenting } from "../privacy/store";
 import { locale, t, tBackend } from "../../i18n";
 
@@ -71,7 +105,9 @@ let savedPage: PageId = "general";
  */
 export function SettingsView() {
   const { section } = nav.use();
-  const [page, setPageState] = useState<PageId>(() => (section && sectionPage[section]) || savedPage);
+  const [page, setPageState] = useState<PageId>(
+    () => (section && sectionPage[section]) || savedPage,
+  );
   const scroller = useRef<HTMLDivElement>(null);
   const setPage = (p: PageId) => {
     savedPage = p;
@@ -83,7 +119,10 @@ export function SettingsView() {
     setPage(sectionPage[section]);
     // The section only exists after the page switch.
     const id = window.setTimeout(
-      () => scroller.current?.querySelector<HTMLElement>(`#settings-${section}`)?.scrollIntoView({ behavior: "smooth", block: "start" }),
+      () =>
+        scroller.current
+          ?.querySelector<HTMLElement>(`#settings-${section}`)
+          ?.scrollIntoView({ behavior: "smooth", block: "start" }),
       120,
     );
     return () => window.clearTimeout(id);
@@ -103,8 +142,18 @@ export function SettingsView() {
                 active ? "text-label" : "text-label-3 hover:text-label-2"
               }`}
             >
-              {active && <motion.span layoutId="settings-page" className="absolute inset-0 rounded-[8px] bg-fill-2" transition={springs.snappy} />}
-              <p.icon size={15} weight={active ? "fill" : "bold"} className="relative shrink-0" />
+              {active && (
+                <motion.span
+                  layoutId="settings-page"
+                  className="absolute inset-0 rounded-[8px] bg-fill-2"
+                  transition={springs.snappy}
+                />
+              )}
+              <p.icon
+                size={15}
+                weight={active ? "fill" : "bold"}
+                className="relative shrink-0"
+              />
               <span className="relative truncate">{t(p.label)}</span>
             </button>
           );
@@ -116,14 +165,22 @@ export function SettingsView() {
           <motion.div
             key={page}
             className="absolute inset-0 flex flex-col gap-4 overflow-y-auto pb-6 [scrollbar-width:none]"
-            style={{ maskImage: "linear-gradient(180deg, #000 calc(100% - 28px), transparent)" }}
+            style={{
+              maskImage:
+                "linear-gradient(180deg, #000 calc(100% - 28px), transparent)",
+            }}
             initial={{ opacity: 0, filter: "blur(4px)" }}
-            animate={{ opacity: 1, filter: "blur(0px)", transition: content.enter }}
+            animate={{
+              opacity: 1,
+              filter: "blur(0px)",
+              transition: content.enter,
+            }}
             exit={{ opacity: 0, filter: "blur(4px)", transition: content.exit }}
           >
             {page === "general" && (
               <>
                 <General />
+                <Music />
                 <Weather />
                 <Updates />
               </>
@@ -179,7 +236,10 @@ function Updates() {
     downloading: t("Wird geladen … {n} %", { n: Math.round(u.progress * 100) }),
     error: t("Prüfung fehlgeschlagen – später erneut versuchen"),
   }[u.phase];
-  const upcoming = u.notes && u.version && u.current ? between(u.notes, u.current, u.version) : [];
+  const upcoming =
+    u.notes && u.version && u.current
+      ? between(u.notes, u.current, u.version)
+      : [];
 
   return (
     <Group title={t("Updates")} id="settings-updates">
@@ -189,31 +249,55 @@ function Updates() {
         </Button>
       </Row>
       <AnimatePresence initial={false}>
-        {(u.phase === "available" || u.phase === "downloading") && u.version && (
-          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={fade} className="overflow-hidden">
-            <Row label={t("Version {v} verfügbar", { v: u.version })} hint={t("Lädt, installiert und startet neu")}>
-              {u.phase === "downloading" ? (
-                <div className="h-1.5 w-28 overflow-hidden rounded-full bg-fill-2">
-                  <div className="h-full origin-left rounded-full bg-label transition-transform duration-150 ease-linear" style={{ transform: `scaleX(${u.progress})` }} />
-                </div>
-              ) : (
-                <Button primary onClick={() => void installUpdate()}>
-                  {t("Jetzt aktualisieren")}
-                </Button>
-              )}
-            </Row>
-            {upcoming.length > 0 && <ChangelogList entries={upcoming} />}
-          </motion.div>
-        )}
+        {(u.phase === "available" || u.phase === "downloading") &&
+          u.version && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={fade}
+              className="overflow-hidden"
+            >
+              <Row
+                label={t("Version {v} verfügbar", { v: u.version })}
+                hint={t("Lädt, installiert und startet neu")}
+              >
+                {u.phase === "downloading" ? (
+                  <div className="h-1.5 w-28 overflow-hidden rounded-full bg-fill-2">
+                    <div
+                      className="h-full origin-left rounded-full bg-label transition-transform duration-150 ease-linear"
+                      style={{ transform: `scaleX(${u.progress})` }}
+                    />
+                  </div>
+                ) : (
+                  <Button primary onClick={() => void installUpdate()}>
+                    {t("Jetzt aktualisieren")}
+                  </Button>
+                )}
+              </Row>
+              {upcoming.length > 0 && <ChangelogList entries={upcoming} />}
+            </motion.div>
+          )}
       </AnimatePresence>
       <Row
         label={
           <span className="flex items-center gap-1.5">
             {t("Neuerungen")}
-            {unseen.length > 0 && !showLog && <span className="size-[7px] rounded-full bg-link" />}
+            {unseen.length > 0 && !showLog && (
+              <span className="size-[7px] rounded-full bg-link" />
+            )}
           </span>
         }
-        hint={unseen.length > 0 ? t(unseen.length === 1 ? "Neu in Version {v}" : "{n} Versionen seit deinem letzten Update", { v: unseen[0].version, n: unseen.length }) : undefined}
+        hint={
+          unseen.length > 0
+            ? t(
+                unseen.length === 1
+                  ? "Neu in Version {v}"
+                  : "{n} Versionen seit deinem letzten Update",
+                { v: unseen[0].version, n: unseen.length },
+              )
+            : undefined
+        }
       >
         <Button
           onClick={() => {
@@ -226,21 +310,51 @@ function Updates() {
       </Row>
       <AnimatePresence initial={false}>
         {showLog && (
-          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={fade} className="overflow-hidden">
-            <ChangelogList entries={between(changelog, null, u.current ?? changelog[0].version)} fresh={fresh} />
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={fade}
+            className="overflow-hidden"
+          >
+            <ChangelogList
+              entries={between(
+                changelog,
+                null,
+                u.current ?? changelog[0].version,
+              )}
+              fresh={fresh}
+            />
           </motion.div>
         )}
       </AnimatePresence>
-      <Row label={t("Automatisch suchen")} hint={t("Einmal täglich, anonym bei GitHub – ohne deine Daten")}>
-        <Switch label={t("Automatisch suchen")} checked={auto} onChange={(on) => updateSettings({ updates: { auto: on } })} />
+      <Row
+        label={t("Automatisch suchen")}
+        hint={t("Einmal täglich, anonym bei GitHub – ohne deine Daten")}
+      >
+        <Switch
+          label={t("Automatisch suchen")}
+          checked={auto}
+          onChange={(on) => updateSettings({ updates: { auto: on } })}
+        />
       </Row>
     </Group>
   );
 }
 
 /** Versions with their short notes; `fresh` marks the ones new since your last update. */
-function ChangelogList({ entries, fresh }: { entries: ChangelogEntry[]; fresh?: Set<string> }) {
-  const date = new Intl.DateTimeFormat(locale(), { day: "numeric", month: "short", year: "numeric" });
+function ChangelogList({
+  entries,
+  fresh,
+}: {
+  entries: ChangelogEntry[];
+  fresh?: Set<string>;
+}) {
+  const date = new Intl.DateTimeFormat(locale(), {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
   return (
     <div className="flex flex-col gap-3 px-3 pt-1.5 pb-3">
       {entries.map((e, i) => (
@@ -251,14 +365,26 @@ function ChangelogList({ entries, fresh }: { entries: ChangelogEntry[]; fresh?: 
           transition={{ ...content.enter, delay: 0.04 * Math.min(i, 6) }}
         >
           <div className="flex items-baseline gap-1.5 text-caption">
-            <span className="tabular font-semibold text-label">{e.version}</span>
-            {fresh?.has(e.version) && <span className="font-medium text-link">{t("Neu")}</span>}
-            <span className="ml-auto text-label-3">{date.format(new Date(`${e.date}T12:00:00`))}</span>
+            <span className="tabular font-semibold text-label">
+              {e.version}
+            </span>
+            {fresh?.has(e.version) && (
+              <span className="font-medium text-link">{t("Neu")}</span>
+            )}
+            <span className="ml-auto text-label-3">
+              {date.format(new Date(`${e.date}T12:00:00`))}
+            </span>
           </div>
           <ul className="mt-1 flex flex-col gap-0.5">
             {e.items.map((item, j) => (
-              <li key={j} className={`flex gap-2 text-footnote ${item.highlight ? "font-semibold text-label" : "text-label-2"}`}>
-                <span aria-hidden className={`mt-[7px] size-[3px] shrink-0 rounded-full ${item.highlight ? "bg-label" : "bg-label-3"}`} />
+              <li
+                key={j}
+                className={`flex gap-2 text-footnote ${item.highlight ? "font-semibold text-label" : "text-label-2"}`}
+              >
+                <span
+                  aria-hidden
+                  className={`mt-[7px] size-[3px] shrink-0 rounded-full ${item.highlight ? "bg-label" : "bg-label-3"}`}
+                />
                 <span>{itemText(item)}</span>
               </li>
             ))}
@@ -273,7 +399,9 @@ function KeysNote() {
   return (
     <div className="flex items-start gap-1.5 px-3 pb-1 text-caption text-label-4">
       <LockSimple size={11} weight="bold" className="mt-0.5 shrink-0" />
-      {t("Schlüssel liegen in der Windows-Anmeldeinformationsverwaltung. Alles bleibt auf diesem PC.")}
+      {t(
+        "Schlüssel liegen in der Windows-Anmeldeinformationsverwaltung. Alles bleibt auf diesem PC.",
+      )}
     </div>
   );
 }
@@ -287,25 +415,47 @@ function Ask() {
           id="ask-provider"
           size="sm"
           value={s.ask.provider}
-          onChange={(provider) => updateSettings({ ask: { ...s.ask, provider } })}
-          options={(Object.keys(providerInfo) as AskProvider[]).map((p) => ({ value: p, label: providerInfo[p].label }))}
+          onChange={(provider) =>
+            updateSettings({ ask: { ...s.ask, provider } })
+          }
+          options={(Object.keys(providerInfo) as AskProvider[]).map((p) => ({
+            value: p,
+            label: providerInfo[p].label,
+          }))}
         />
       </Row>
       {s.ask.provider === "custom" && (
-        <Row label={t("Base-URL")} hint={t("OpenAI-kompatibel, endet meist auf /v1")}>
+        <Row
+          label={t("Base-URL")}
+          hint={t("OpenAI-kompatibel, endet meist auf /v1")}
+        >
           <TextField
             value={s.ask.configs.custom.baseUrl}
-            onChange={(baseUrl) => updateAsk("custom", { baseUrl: baseUrl.trim() })}
+            onChange={(baseUrl) =>
+              updateAsk("custom", { baseUrl: baseUrl.trim() })
+            }
             placeholder="https://…/v1"
             width="w-52"
           />
         </Row>
       )}
-      <SecretRow name={`ai.${s.ask.provider}` as SecretName} label={t("API-Schlüssel")} />
-      <Row label={t("Modell")} hint={s.ask.provider === "openrouter" ? t("Modell-ID von openrouter.ai/models") : undefined}>
+      <SecretRow
+        name={`ai.${s.ask.provider}` as SecretName}
+        label={t("API-Schlüssel")}
+      />
+      <Row
+        label={t("Modell")}
+        hint={
+          s.ask.provider === "openrouter"
+            ? t("Modell-ID von openrouter.ai/models")
+            : undefined
+        }
+      >
         <TextField
           value={s.ask.configs[s.ask.provider].model}
-          onChange={(model) => updateAsk(s.ask.provider, { model: model.trim() })}
+          onChange={(model) =>
+            updateAsk(s.ask.provider, { model: model.trim() })
+          }
           placeholder={t(providerInfo[s.ask.provider].modelHint)}
           width="w-52"
         />
@@ -340,9 +490,15 @@ function Trading() {
         />
       </Row>
       <SecretRow name="t212.key" label={t("API-Schlüssel")} />
-      <SecretRow name="t212.secret" label={t("API-Secret")} hint={t("Nur einmal sichtbar beim Erstellen")} />
+      <SecretRow
+        name="t212.secret"
+        label={t("API-Secret")}
+        hint={t("Nur einmal sichtbar beim Erstellen")}
+      />
       <div className="px-3 py-2 text-caption text-label-3">
-        {t("In Trading 212: Einstellungen → API (Beta) → Schlüssel erstellen. Rechte: Konto-Daten und Portfolio – mehr ist nicht nötig, die Notch liest nur.")}
+        {t(
+          "In Trading 212: Einstellungen → API (Beta) → Schlüssel erstellen. Rechte: Konto-Daten und Portfolio – mehr ist nicht nötig, die Notch liest nur.",
+        )}
       </div>
     </Group>
   );
@@ -374,7 +530,9 @@ function General() {
           id="clock-format"
           size="sm"
           value={s.units.clock}
-          onChange={(clock) => updateSettings((p) => ({ units: { ...p.units, clock } }))}
+          onChange={(clock) =>
+            updateSettings((p) => ({ units: { ...p.units, clock } }))
+          }
           options={[
             { value: "24", label: t("24 Std.") },
             { value: "12", label: t("12 Std.") },
@@ -395,7 +553,13 @@ function General() {
       </Row>
       <AnimatePresence initial={false}>
         {s.openMode === "hover" && (
-          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={fade} className="overflow-hidden">
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={fade}
+            className="overflow-hidden"
+          >
             <Row label={t("Hover-Verzögerung")}>
               <Segmented
                 id="hover-delay"
@@ -424,11 +588,19 @@ function General() {
           />
         )}
       </Row>
-      <Row label={t("Tastenkürzel")} hint={t("Öffnet und schließt die Notch von überall")}>
+      <Row
+        label={t("Tastenkürzel")}
+        hint={t("Öffnet und schließt die Notch von überall")}
+      >
         <span className="flex items-center gap-1 text-caption text-label-2">
           <Keyboard size={13} weight="bold" className="text-label-3" />
           {["Strg", "Alt", "Leertaste"].map((k) => (
-            <kbd key={k} className="rounded-[5px] bg-fill-2 px-1.5 py-0.5 font-sans text-caption">{t(k)}</kbd>
+            <kbd
+              key={k}
+              className="rounded-[5px] bg-fill-2 px-1.5 py-0.5 font-sans text-caption"
+            >
+              {t(k)}
+            </kbd>
           ))}
         </span>
       </Row>
@@ -446,16 +618,28 @@ function Display() {
   useEffect(() => {
     void display.monitors().then(setMonitors);
   }, []);
-  const label = (m: MonitorInfo, i: number) => `${m.primary ? t("Hauptbildschirm") : t("Bildschirm {n}", { n: i + 1 })} · ${m.width}×${m.height}`;
+  const label = (m: MonitorInfo, i: number) =>
+    `${m.primary ? t("Hauptbildschirm") : t("Bildschirm {n}", { n: i + 1 })} · ${m.width}×${m.height}`;
 
   return (
     <Group id="settings-display">
-      <Row label={t("Sichtbarkeit")} hint={d.visibility === "always" ? t("Bleibt über jedem Fenster, auch im Vollbild") : t("Verschwindet bei Spielen, Videos und Präsentationen")}>
+      <Row
+        label={t("Sichtbarkeit")}
+        hint={
+          d.visibility === "always"
+            ? t("Bleibt über jedem Fenster, auch im Vollbild")
+            : t("Verschwindet bei Spielen, Videos und Präsentationen")
+        }
+      >
         <Segmented
           id="display-visibility"
           size="sm"
           value={d.visibility}
-          onChange={(visibility) => updateSettings((cur) => ({ display: { ...cur.display, visibility } }))}
+          onChange={(visibility) =>
+            updateSettings((cur) => ({
+              display: { ...cur.display, visibility },
+            }))
+          }
           options={[
             { value: "always", label: t("Immer oben") },
             { value: "hide-fullscreen", label: t("Vollbild: aus") },
@@ -466,17 +650,45 @@ function Display() {
         <Row label={t("Monitor")}>
           <Select
             width="w-52"
-            value={d.monitor ?? monitors.find((m) => m.primary)?.name ?? monitors[0].name}
-            onChange={(name) => updateSettings((cur) => ({ display: { ...cur.display, monitor: monitors.find((m) => m.name === name)?.primary ? null : name } }))}
-            options={monitors.map((m, i) => ({ value: m.name, label: label(m, i) }))}
+            value={
+              d.monitor ??
+              monitors.find((m) => m.primary)?.name ??
+              monitors[0].name
+            }
+            onChange={(name) =>
+              updateSettings((cur) => ({
+                display: {
+                  ...cur.display,
+                  monitor: monitors.find((m) => m.name === name)?.primary
+                    ? null
+                    : name,
+                },
+              }))
+            }
+            options={monitors.map((m, i) => ({
+              value: m.name,
+              label: label(m, i),
+            }))}
           />
         </Row>
       )}
       {d.offset !== 0 && (
-        <Row label={t("Position")} hint={t("Notch an der Kopfzeile oder geschlossen ziehen, um sie zu verschieben")}>
-          <Button onClick={() => updateSettings((cur) => ({ display: { ...cur.display, offset: 0 } }))}>
+        <Row
+          label={t("Position")}
+          hint={t(
+            "Notch an der Kopfzeile oder geschlossen ziehen, um sie zu verschieben",
+          )}
+        >
+          <Button
+            onClick={() =>
+              updateSettings((cur) => ({
+                display: { ...cur.display, offset: 0 },
+              }))
+            }
+          >
             <span className="flex items-center gap-1.5">
-              <ArrowsInLineHorizontal size={13} weight="bold" /> {t("Zur Mitte")}
+              <ArrowsInLineHorizontal size={13} weight="bold" />{" "}
+              {t("Zur Mitte")}
             </span>
           </Button>
         </Row>
@@ -485,7 +697,9 @@ function Display() {
         label={t("Geschlossen")}
         hint={
           d.idleStyle === "line"
-            ? t("Nur eine dünne Linie – Musik und Co. bleiben verborgen, ein abgelaufener Timer klappt trotzdem auf")
+            ? t(
+                "Nur eine dünne Linie – Musik und Co. bleiben verborgen, ein abgelaufener Timer klappt trotzdem auf",
+              )
             : t("Die Notch zeigt Musik, Timer und Co.")
         }
       >
@@ -493,25 +707,46 @@ function Display() {
           id="idle-style"
           size="sm"
           value={d.idleStyle}
-          onChange={(idleStyle) => updateSettings((cur) => ({ display: { ...cur.display, idleStyle } }))}
+          onChange={(idleStyle) =>
+            updateSettings((cur) => ({
+              display: { ...cur.display, idleStyle },
+            }))
+          }
           options={[
             { value: "notch", label: t("Notch") },
             { value: "line", label: t("Linie") },
           ]}
         />
       </Row>
-      <Row label={t("Fokus-Modus")} hint={t("Klicks gehen durch. 3× schnell auf die Notch klicken schaltet um – oder im Tray-Menü.")}>
-        <Switch label={t("Fokus-Modus")} checked={focus} onChange={setFocusMode} />
+      <Row
+        label={t("Fokus-Modus")}
+        hint={t(
+          "Klicks gehen durch. 3× schnell auf die Notch klicken schaltet um – oder im Tray-Menü.",
+        )}
+      >
+        <Switch
+          label={t("Fokus-Modus")}
+          checked={focus}
+          onChange={setFocusMode}
+        />
       </Row>
       <Row
         label={t("Fokus-Darstellung")}
-        hint={d.focusStyle === "line" ? t("Nur eine dünne Linie am Rand, ohne Musik und Co.") : t("Halb durchsichtig, Musik und Co. bleiben sichtbar")}
+        hint={
+          d.focusStyle === "line"
+            ? t("Nur eine dünne Linie am Rand, ohne Musik und Co.")
+            : t("Halb durchsichtig, Musik und Co. bleiben sichtbar")
+        }
       >
         <Segmented
           id="focus-style"
           size="sm"
           value={d.focusStyle}
-          onChange={(focusStyle) => updateSettings((cur) => ({ display: { ...cur.display, focusStyle } }))}
+          onChange={(focusStyle) =>
+            updateSettings((cur) => ({
+              display: { ...cur.display, focusStyle },
+            }))
+          }
           options={[
             { value: "dim", label: t("Durchsichtig") },
             { value: "line", label: t("Linie") },
@@ -536,12 +771,26 @@ function Display() {
       </Row>
       {fpsError === "no-admin" && <FpsUnlockRow />}
       {fpsError === "relogin" && (
-        <Row label={t("FPS freischalten")} hint={t("Fertig – einmal ab- und wieder anmelden, dann laufen die FPS")}>
+        <Row
+          label={t("FPS freischalten")}
+          hint={t(
+            "Fertig – einmal ab- und wieder anmelden, dann laufen die FPS",
+          )}
+        >
           <SignOut size={18} weight="bold" className="text-orange" />
         </Row>
       )}
-      <Row label={t("Aufnahme-Punkte")} hint={t("Grün: Mikrofon/Kamera aktiv · Rot: Bildschirm wird aufgenommen")}>
-        <Switch label={t("Aufnahme-Punkte")} checked={s.privacyDots} onChange={(privacyDots) => updateSettings({ privacyDots })} />
+      <Row
+        label={t("Aufnahme-Punkte")}
+        hint={t(
+          "Grün: Mikrofon/Kamera aktiv · Rot: Bildschirm wird aufgenommen",
+        )}
+      >
+        <Switch
+          label={t("Aufnahme-Punkte")}
+          checked={s.privacyDots}
+          onChange={(privacyDots) => updateSettings({ privacyDots })}
+        />
       </Row>
     </Group>
   );
@@ -556,19 +805,37 @@ function Presentation() {
     <Group title={t("Präsentationsmodus")} id="settings-presentation">
       <Row
         label={t("Präsentationsmodus")}
-        hint={presenting && !manual ? t("Aktiv – Bildschirmaufnahme erkannt") : t("Blendet Zwischenablage, Kontostände und Tresor aus")}
+        hint={
+          presenting && !manual
+            ? t("Aktiv – Bildschirmaufnahme erkannt")
+            : t("Blendet Zwischenablage, Kontostände und Tresor aus")
+        }
       >
-        <Switch label={t("Präsentationsmodus")} checked={presenting} onChange={togglePresentation} />
+        <Switch
+          label={t("Präsentationsmodus")}
+          checked={presenting}
+          onChange={togglePresentation}
+        />
       </Row>
-      <Row label={t("Bei Bildschirmaufnahme")} hint={t("Teams, Discord, OBS … – schaltet sich danach wieder ab")}>
+      <Row
+        label={t("Bei Bildschirmaufnahme")}
+        hint={t("Teams, Discord, OBS … – schaltet sich danach wieder ab")}
+      >
         <Switch
           label={t("Bei Bildschirmaufnahme")}
           checked={auto}
-          onChange={(on) => updateSettings((cur) => ({ presentation: { ...cur.presentation, auto: on } }))}
+          onChange={(on) =>
+            updateSettings((cur) => ({
+              presentation: { ...cur.presentation, auto: on },
+            }))
+          }
         />
       </Row>
       {auto && recording && !presenting && (
-        <Row label={t("Für diese Aufnahme aus")} hint={t("Schaltet sich bei der nächsten wieder ein")} />
+        <Row
+          label={t("Für diese Aufnahme aus")}
+          hint={t("Schaltet sich bei der nächsten wieder ein")}
+        />
       )}
     </Group>
   );
@@ -592,18 +859,39 @@ function Discord() {
   const save = () => updateSettings({ discord: { clientId: id.trim() } });
   return (
     <Group title="Discord" id="settings-discord">
-      <Row label={t("Status")} hint={state.error ? tBackend(state.error) : undefined}>
-        <span className={`text-caption ${state.status === "ready" ? "text-green" : "text-label-2"}`}>{t(discordStatus[state.status] ?? state.status)}</span>
+      <Row
+        label={t("Status")}
+        hint={state.error ? tBackend(state.error) : undefined}
+      >
+        <span
+          className={`text-caption ${state.status === "ready" ? "text-green" : "text-label-2"}`}
+        >
+          {t(discordStatus[state.status] ?? state.status)}
+        </span>
       </Row>
       <Row label={t("Client-ID")}>
         <div className="flex items-center gap-1.5">
-          <TextField value={id} onChange={setId} onSubmit={save} placeholder="123456789012345678" width="w-40" />
-          {id.trim() !== s.discord.clientId && <Button onClick={save}>{t("Sichern")}</Button>}
+          <TextField
+            value={id}
+            onChange={setId}
+            onSubmit={save}
+            placeholder="123456789012345678"
+            width="w-40"
+          />
+          {id.trim() !== s.discord.clientId && (
+            <Button onClick={save}>{t("Sichern")}</Button>
+          )}
         </div>
       </Row>
-      <SecretRow name="discord.secret" label={t("Client-Secret")} onSaved={reconnectDiscord} />
+      <SecretRow
+        name="discord.secret"
+        label={t("Client-Secret")}
+        onSaved={reconnectDiscord}
+      />
       <div className="px-3 py-2 text-caption text-label-3">
-        {t("discord.com/developers → New Application → OAuth2: Client-ID und Client-Secret kopieren und unter Redirects http://localhost eintragen und speichern. Beim ersten Verbinden fragt Discord einmal nach.")}
+        {t(
+          "discord.com/developers → New Application → OAuth2: Client-ID und Client-Secret kopieren und unter Redirects http://localhost eintragen und speichern. Beim ersten Verbinden fragt Discord einmal nach.",
+        )}
       </div>
     </Group>
   );
@@ -622,7 +910,8 @@ function Alarm() {
   const a = settings.use().alarm;
   const [previewing, setPreviewing] = useState(false);
   const timer = useRef<number | undefined>(undefined);
-  const set = (patch: Partial<typeof a>) => updateSettings((cur) => ({ alarm: { ...cur.alarm, ...patch } }));
+  const set = (patch: Partial<typeof a>) =>
+    updateSettings((cur) => ({ alarm: { ...cur.alarm, ...patch } }));
 
   const preview = (next = a) => {
     window.clearTimeout(timer.current);
@@ -646,7 +935,11 @@ function Alarm() {
             }}
             className="pressable pressable-fill flex size-7 items-center justify-center rounded-full bg-fill-2 text-label"
           >
-            {previewing ? <Stop size={11} weight="fill" /> : <Play size={11} weight="fill" />}
+            {previewing ? (
+              <Stop size={11} weight="fill" />
+            ) : (
+              <Play size={11} weight="fill" />
+            )}
           </button>
           <Select
             width="w-36"
@@ -661,24 +954,47 @@ function Alarm() {
       </Row>
       <Row label={t("Lautstärke")}>
         <div className="flex w-52 items-center gap-2">
-          <Slider label={t("Lautstärke")} value={Math.round(a.volume * 100)} min={5} max={100} step={5} onChange={(v) => set({ volume: v / 100 })} />
-          <span className="tabular w-8 text-right text-caption text-label-2">{Math.round(a.volume * 100)}</span>
+          <Slider
+            label={t("Lautstärke")}
+            value={Math.round(a.volume * 100)}
+            min={5}
+            max={100}
+            step={5}
+            onChange={(v) => set({ volume: v / 100 })}
+          />
+          <span className="tabular w-8 text-right text-caption text-label-2">
+            {Math.round(a.volume * 100)}
+          </span>
         </div>
       </Row>
       <Row label={t("Dauer")} hint={t("Wie lange der Alarm klingelt")}>
-        <Segmented id="alarm-duration" size="sm" value={String(a.duration)} onChange={(v) => set({ duration: Number(v) as AlarmDuration })} options={durations.map((o) => ({ ...o, label: t(o.label) }))} />
+        <Segmented
+          id="alarm-duration"
+          size="sm"
+          value={String(a.duration)}
+          onChange={(v) => set({ duration: Number(v) as AlarmDuration })}
+          options={durations.map((o) => ({ ...o, label: t(o.label) }))}
+        />
       </Row>
     </Group>
   );
 }
 
 /** AI usage: which plans are shown. Data comes from the signed-in apps. */
-const usageSources: { id: UsageId | "grok"; hint: string; available: boolean }[] = [
+const usageSources: {
+  id: UsageId | "grok";
+  hint: string;
+  available: boolean;
+}[] = [
   { id: "claude", hint: "Über die Anmeldung von Claude Code", available: true },
   { id: "codex", hint: "Über die Anmeldung der Codex CLI", available: true },
   { id: "gemini", hint: "Über die Anmeldung der Gemini CLI", available: true },
   { id: "cursor", hint: "Über die Anmeldung der Cursor-App", available: true },
-  { id: "grok", hint: "xAI bietet keinen Abruf der Abo-Limits", available: false },
+  {
+    id: "grok",
+    hint: "xAI bietet keinen Abruf der Abo-Limits",
+    available: false,
+  },
 ];
 
 function UsageProviders() {
@@ -689,7 +1005,9 @@ function UsageProviders() {
         <Row
           key={src.id}
           label={
-            <span className={`flex items-center gap-2 ${src.available ? "" : "text-label-3"}`}>
+            <span
+              className={`flex items-center gap-2 ${src.available ? "" : "text-label-3"}`}
+            >
               <BrandLogo id={src.id} size={14} /> {brandName[src.id]}
             </span>
           }
@@ -699,10 +1017,16 @@ function UsageProviders() {
             <Switch
               label={brandName[src.id]}
               checked={usage[src.id as UsageId]}
-              onChange={(on) => updateSettings((cur) => ({ usage: { ...cur.usage, [src.id]: on } }))}
+              onChange={(on) =>
+                updateSettings((cur) => ({
+                  usage: { ...cur.usage, [src.id]: on },
+                }))
+              }
             />
           ) : (
-            <span className="text-caption text-label-4">{t("Nicht verfügbar")}</span>
+            <span className="text-caption text-label-4">
+              {t("Nicht verfügbar")}
+            </span>
           )}
         </Row>
       ))}
@@ -712,14 +1036,18 @@ function UsageProviders() {
 
 /** FPS without admin: unlock once instead of running the notch as administrator every time. */
 function FpsUnlockRow() {
-  const [state, setState] = useState<"idle" | "busy" | "ok" | "relogin" | "cancelled" | "failed">("idle");
+  const [state, setState] = useState<
+    "idle" | "busy" | "ok" | "relogin" | "cancelled" | "failed"
+  >("idle");
   const hint = {
     idle: t("Einmalige Windows-Abfrage, danach nie wieder Administratorrechte"),
     busy: t("Bitte die Windows-Abfrage bestätigen …"),
     ok: t("Freigeschaltet – die FPS laufen"),
     relogin: t("Fertig – einmal ab- und wieder anmelden, dann laufen die FPS"),
     cancelled: t("Abgebrochen"),
-    failed: t("Hat nicht geklappt – L4-Notchbar einmal als Administrator starten"),
+    failed: t(
+      "Hat nicht geklappt – L4-Notchbar einmal als Administrator starten",
+    ),
   }[state];
   return (
     <Row label={t("FPS freischalten")} hint={hint}>
@@ -740,13 +1068,73 @@ function FpsUnlockRow() {
   );
 }
 
+/** Music Settings: Toggle Live Lyrics and choose the number of lines to display. */
+function Music() {
+  const s = settings.use();
+  // Default values if 'music' is not yet added to the main store
+  const m = s.music || { showLyrics: true, lyricsLines: "1" };
+
+  return (
+    <Group title={t("Musik")} id="settings-music">
+      <Row
+        label={t("Live-Songtexte")}
+        hint={t("Synchronisierte Liedtexte anzeigen, während die Musik spielt")}
+      >
+        <Switch
+          label={t("Live-Songtexte")}
+          checked={m.showLyrics}
+          onChange={(on) =>
+            updateSettings((cur) => ({
+              music: { ...cur.music, showLyrics: on },
+            }))
+          }
+        />
+      </Row>
+      <AnimatePresence initial={false}>
+        {m.showLyrics && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={fade}
+            className="overflow-hidden"
+          >
+            <Row
+              label={t("Anzahl der Zeilen")}
+              hint={t("Wie viele Zeilen des Liedtextes angezeigt werden")}
+            >
+              <Segmented
+                id="lyrics-lines"
+                size="sm"
+                value={m.lyricsLines}
+                onChange={(lyricsLines) =>
+                  updateSettings((cur) => ({
+                    music: { ...cur.music, lyricsLines },
+                  }))
+                }
+                options={[
+                  { value: "1", label: t("1 Zeile") },
+                  { value: "2", label: t("2 Zeilen") },
+                ]}
+              />
+            </Row>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </Group>
+  );
+}
+
 /** Weather location: automatic via IP or fixed, right here without opening the weather tool. */
 function Weather() {
   const { weather: w, units } = settings.use();
   const [searching, setSearching] = useState(false);
   return (
     <Group title={t("Wetter")} id="settings-weather">
-      <Row label={t("Standort")} hint={w?.auto ? t("Ungefähr, aus deiner IP-Adresse") : undefined}>
+      <Row
+        label={t("Standort")}
+        hint={w?.auto ? t("Ungefähr, aus deiner IP-Adresse") : undefined}
+      >
         <Segmented<"auto" | "manual">
           id="weather-mode"
           size="sm"
@@ -768,7 +1156,9 @@ function Weather() {
           id="temp-unit"
           size="sm"
           value={units.temp}
-          onChange={(temp) => updateSettings((p) => ({ units: { ...p.units, temp } }))}
+          onChange={(temp) =>
+            updateSettings((p) => ({ units: { ...p.units, temp } }))
+          }
           options={[
             { value: "c", label: "°C" },
             { value: "f", label: "°F" },
@@ -776,13 +1166,25 @@ function Weather() {
         />
       </Row>
       <Row label={t("Ort")}>
-        <Button onClick={() => setSearching((v) => !v)}>{w?.name ?? t("Wird erkannt …")}</Button>
+        <Button onClick={() => setSearching((v) => !v)}>
+          {w?.name ?? t("Wird erkannt …")}
+        </Button>
       </Row>
       <AnimatePresence initial={false}>
         {searching && (
-          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={fade} className="overflow-hidden">
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={fade}
+            className="overflow-hidden"
+          >
             <div className="p-2">
-              <PlaceSearch compact canCancel onDone={() => setSearching(false)} />
+              <PlaceSearch
+                compact
+                canCancel
+                onDone={() => setSearching(false)}
+              />
             </div>
           </motion.div>
         )}
@@ -803,7 +1205,11 @@ function Tools() {
         as="div"
         axis="y"
         values={s.tools.map((x) => x.id)}
-        onReorder={(ids: string[]) => updateSettings((cur) => ({ tools: ids.map((id) => cur.tools.find((x) => x.id === id)!) }))}
+        onReorder={(ids: string[]) =>
+          updateSettings((cur) => ({
+            tools: ids.map((id) => cur.tools.find((x) => x.id === id)!),
+          }))
+        }
         className="divide-y divide-separator"
       >
         {s.tools.map((tool) => {
@@ -819,19 +1225,37 @@ function Tools() {
               onDragEnd={() => setDragging(null)}
               whileDrag={{ scale: 1.02 }}
               className={`group relative flex h-9 cursor-grab items-center gap-2.5 px-3 active:cursor-grabbing ${
-                dragging === tool.id ? "z-10 rounded-[10px] bg-elevated shadow-[0_6px_18px_rgb(0_0_0/0.45)]" : ""
+                dragging === tool.id
+                  ? "z-10 rounded-[10px] bg-elevated shadow-[0_6px_18px_rgb(0_0_0/0.45)]"
+                  : ""
               }`}
             >
-              <DotsSixVertical size={13} weight="bold" className="-ml-1 text-label-4 transition-colors group-hover:text-label-3" />
-              <tab.icon size={15} weight="bold" className={tool.enabled ? "text-label-2" : "text-label-4"} />
-              <span className={`flex-1 text-body select-none ${tool.enabled ? "text-label" : "text-label-3"}`}>{t(tab.label)}</span>
+              <DotsSixVertical
+                size={13}
+                weight="bold"
+                className="-ml-1 text-label-4 transition-colors group-hover:text-label-3"
+              />
+              <tab.icon
+                size={15}
+                weight="bold"
+                className={tool.enabled ? "text-label-2" : "text-label-4"}
+              />
+              <span
+                className={`flex-1 text-body select-none ${tool.enabled ? "text-label" : "text-label-3"}`}
+              >
+                {t(tab.label)}
+              </span>
               <div onPointerDown={(e) => e.stopPropagation()}>
                 <Switch
                   label={t(tab.label)}
                   checked={tool.enabled}
                   onChange={(enabled) => {
                     if (!enabled && enabledCount <= 1) return;
-                    updateSettings((cur) => ({ tools: cur.tools.map((x) => (x.id === tool.id ? { ...x, enabled } : x)) }));
+                    updateSettings((cur) => ({
+                      tools: cur.tools.map((x) =>
+                        x.id === tool.id ? { ...x, enabled } : x,
+                      ),
+                    }));
                   }}
                 />
               </div>
@@ -847,7 +1271,17 @@ function Tools() {
  * Field for a key. Stored values are never read back, it only shows
  * "saved ✓". Typing a new one overwrites it, saving empty deletes it.
  */
-function SecretRow({ name, label, hint, onSaved }: { name: SecretName; label: string; hint?: string; onSaved?: () => void }) {
+function SecretRow({
+  name,
+  label,
+  hint,
+  onSaved,
+}: {
+  name: SecretName;
+  label: string;
+  hint?: string;
+  onSaved?: () => void;
+}) {
   const [stored, setStored] = useState(false);
   const [value, setValue] = useState("");
   const [saved, setSaved] = useState(false);
@@ -871,12 +1305,24 @@ function SecretRow({ name, label, hint, onSaved }: { name: SecretName; label: st
       <div className="flex items-center gap-1.5">
         <AnimatePresence>
           {(saved || (stored && !value)) && (
-            <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={fade}>
+            <motion.span
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={fade}
+            >
               <CheckCircle size={14} weight="fill" className="text-green" />
             </motion.span>
           )}
         </AnimatePresence>
-        <TextField secret value={value} onChange={setValue} onSubmit={() => void save()} placeholder={stored ? t("Gespeichert") : t("Einfügen")} width="w-40" />
+        <TextField
+          secret
+          value={value}
+          onChange={setValue}
+          onSubmit={() => void save()}
+          placeholder={stored ? t("Gespeichert") : t("Einfügen")}
+          width="w-40"
+        />
         {(value || stored) && (
           <Button onClick={() => void save()} disabled={!value && !stored}>
             {value ? t("Sichern") : t("Löschen")}

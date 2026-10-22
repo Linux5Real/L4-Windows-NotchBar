@@ -25,13 +25,13 @@ export const PADDING = 16;
 
 export const geometry = {
   /** Idle: MacBook notch proportions (about 185 × 32 pt). */
-  closed: { w: 188, h: 30, r: 10, ear: 6 },
+  closed: { w: 188, h: 30, r: 20, ear: 6 },
   /** Hover: slightly larger, as feedback. */
-  peek: { w: 204, h: 34, r: 12, ear: 7 },
+  peek: { w: 204, h: 34, r: 20, ear: 7 },
   /** Closed with a live activity (music): side slots for cover + equalizer. */
-  live: { w: 284, h: 30, r: 10, ear: 6 },
+  live: { w: 284, h: 30, r: 20, ear: 6 },
   /** Gaming mode: wider slots for FPS/CPU on the left and GPU/RAM on the right. */
-  gaming: { w: 436, h: 30, r: 10, ear: 6 },
+  gaming: { w: 436, h: 30, r: 20, ear: 6 },
   /** Focus mode "line": a thin strip at the screen edge, just enough to find it again. */
   line: { w: 150, h: 5, r: 2.5, ear: 3 },
   /** Hover on the line: it stays a line, just a touch bigger, then opens straight away. */

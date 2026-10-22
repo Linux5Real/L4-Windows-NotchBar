@@ -20,8 +20,15 @@ export interface Settings {
   trading: { env: "live" | "demo" };
   /** AI usage: which providers are shown (order = display order). */
   usage: { claude: boolean; codex: boolean; gemini: boolean; cursor: boolean };
-  ask: { provider: AskProvider; configs: Record<AskProvider, AskProviderConfig> };
+  ask: {
+    provider: AskProvider;
+    configs: Record<AskProvider, AskProviderConfig>;
+  };
   /** `auto` = detected via IP (again on every start); a picked location stays. */
+  music: {
+    showLyrics: boolean;
+    lyricsLines: "1" | "2";
+  };
   weather: { name: string; lat: number; lon: number; auto?: boolean } | null;
   /**
    * Display: always on top or hidden in fullscreen; monitor name (null = primary);
@@ -94,8 +101,15 @@ const defaults: Settings = {
       custom: { model: "", effort: "medium", baseUrl: "" },
     },
   },
+  music: { showLyrics: true, lyricsLines: "2" },
   weather: null,
-  display: { visibility: "always", monitor: null, offset: 0, focusStyle: "dim", idleStyle: "notch" },
+  display: {
+    visibility: "always",
+    monitor: null,
+    offset: 0,
+    focusStyle: "dim",
+    idleStyle: "notch",
+  },
   gaming: { mode: "off" },
   privacyDots: false,
   discord: { clientId: "" },
@@ -113,17 +127,26 @@ function regionUnits(): Settings["units"] {
   let cycle: string | undefined;
   try {
     region = new Intl.Locale(loc).maximize().region ?? "";
-    cycle = new Intl.DateTimeFormat(loc, { hour: "numeric" }).resolvedOptions().hourCycle;
+    cycle = new Intl.DateTimeFormat(loc, { hour: "numeric" }).resolvedOptions()
+      .hourCycle;
   } catch {
     // Unknown locale → metric, 24 h.
   }
   return {
-    temp: ["US", "LR", "MM", "BS", "BZ", "KY", "PW", "FM", "MH"].includes(region) ? "f" : "c",
+    temp: ["US", "LR", "MM", "BS", "BZ", "KY", "PW", "FM", "MH"].includes(
+      region,
+    )
+      ? "f"
+      : "c",
     clock: cycle === "h12" || cycle === "h11" ? "12" : "24",
   };
 }
 
-export const hoverDelayMs: Record<Settings["hoverDelay"], number> = { fast: 90, normal: 220, patient: 480 };
+export const hoverDelayMs: Record<Settings["hoverDelay"], number> = {
+  fast: 90,
+  normal: 220,
+  patient: 480,
+};
 
 /** No settings saved yet = fresh install (read before the store writes its defaults). */
 export const firstRun = (() => {
@@ -134,7 +157,9 @@ export const firstRun = (() => {
   }
 })();
 
-export const settings = createStore<Settings>(defaults, { persist: "settings" });
+export const settings = createStore<Settings>(defaults, {
+  persist: "settings",
+});
 
 // Fill in settings from older versions: new fields + append new tools.
 settings.set((s) => {
@@ -153,6 +178,7 @@ settings.set((s) => {
     trading: { ...defaults.trading, ...s.trading },
     usage: { ...defaults.usage, ...s.usage },
     display: { ...defaults.display, ...s.display },
+    music: { ...defaults.music, ...s.music },
     gaming: { ...defaults.gaming, ...s.gaming },
     discord: { ...defaults.discord, ...s.discord },
     alarm: { ...defaults.alarm, ...s.alarm },
@@ -164,18 +190,41 @@ settings.set((s) => {
 });
 
 /** Migrates the old shape ({ provider: "demo", model }) and adds missing providers. */
-function migrateAsk(old: Partial<Settings["ask"]> | undefined): Settings["ask"] {
+function migrateAsk(
+  old: Partial<Settings["ask"]> | undefined,
+): Settings["ask"] {
   const known = Object.keys(defaults.ask.configs) as AskProvider[];
-  const provider = old?.provider && known.includes(old.provider) ? old.provider : defaults.ask.provider;
+  const provider =
+    old?.provider && known.includes(old.provider)
+      ? old.provider
+      : defaults.ask.provider;
   const configs = { ...defaults.ask.configs };
-  for (const p of known) configs[p] = { ...defaults.ask.configs[p], ...old?.configs?.[p] };
+  for (const p of known)
+    configs[p] = { ...defaults.ask.configs[p], ...old?.configs?.[p] };
   return { provider, configs };
 }
 
-export function updateAsk(provider: AskProvider, patch: Partial<AskProviderConfig>) {
-  settings.set((s) => ({ ...s, ask: { ...s.ask, configs: { ...s.ask.configs, [provider]: { ...s.ask.configs[provider], ...patch } } } }));
+export function updateAsk(
+  provider: AskProvider,
+  patch: Partial<AskProviderConfig>,
+) {
+  settings.set((s) => ({
+    ...s,
+    ask: {
+      ...s.ask,
+      configs: {
+        ...s.ask.configs,
+        [provider]: { ...s.ask.configs[provider], ...patch },
+      },
+    },
+  }));
 }
 
-export function updateSettings(patch: Partial<Settings> | ((s: Settings) => Partial<Settings>)) {
-  settings.set((s) => ({ ...s, ...(typeof patch === "function" ? patch(s) : patch) }));
+export function updateSettings(
+  patch: Partial<Settings> | ((s: Settings) => Partial<Settings>),
+) {
+  settings.set((s) => ({
+    ...s,
+    ...(typeof patch === "function" ? patch(s) : patch),
+  }));
 }

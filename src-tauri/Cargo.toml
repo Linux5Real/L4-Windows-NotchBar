@@ -19,6 +19,7 @@ tauri-plugin-autostart = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 base64 = "0.22"
+getrandom = "0.3"
 arboard = { version = "3", features = ["image-data"] }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "gif", "bmp", "ico", "tiff", "dds", "tga"] }
 cpal = "0.18"
@@ -41,6 +42,7 @@ rqrr = { version = "0.10", default-features = false }
 aes-gcm = "0.10"
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
+tauri-plugin-notification = "2"
 
 [target.'cfg(windows)'.dependencies]
 webview2-com = "0.39"
@@ -50,8 +52,12 @@ windows = { version = "0.62", features = [
   "Security_Credentials",
   "Security_Cryptography",
   "Media_Control",
+  "Media_Ocr",
   "UI_Shell",
+  "Graphics_Imaging",
+  "Globalization",
   "Storage_Streams",
+  "Storage",
   "Win32_Foundation",
   "Win32_Media_Audio",
   "Win32_Media_Audio_Endpoints",

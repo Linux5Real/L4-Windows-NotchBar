@@ -11,7 +11,7 @@ import { showcase, showcaseCall, showcaseCash, showcaseDayChange, showcaseFileSi
 
 // ---------- Secrets (Credential Manager) ----------
 
-export type SecretName = "t212.key" | "t212.secret" | "ai.anthropic" | "ai.openai" | "ai.openrouter" | "ai.custom" | "discord.secret";
+export type SecretName = "t212.key" | "t212.secret" | "ai.anthropic" | "ai.openai" | "ai.openrouter" | "ai.custom" | "ai.opencode" | "discord.secret";
 
 const mockSecrets = new Map<SecretName, string>();
 
@@ -304,6 +304,52 @@ export function filePreview(path: string): Promise<string | null> {
   return isNative ? invoke<string | null>("file_preview", { path }) : Promise.resolve(null);
 }
 
+// ---------- OCR (Text aus Bild) ----------
+
+export interface OcrResult {
+  text: string;
+  /** "" = beste verfügbare Sprache offen (auto), sonst das gewählte Tag. */
+  language: string;
+}
+
+/** Recognizes text in an image, fully local (Windows OCR). Browser: demo sample. */
+export function ocrRecognize(path: string, language: string | null): Promise<OcrResult> {
+  if (isNative) return invoke<OcrResult>("ocr_recognize", { path, language });
+  return new Promise((r) => setTimeout(() => r(demoOcr(language, path)), 700));
+}
+
+function demoOcr(language: string | null, path: string): OcrResult {
+  return {
+    // Demo sample (native OCR returns the real text; tBackend keeps every string legal here). Demo texts are plain string literals, no t().
+    text:
+      language === "ar" || path.endsWith("arabic.png")
+        ? "موعد الاجتماع غدًا الساعة العاشرة صباحًا في مكتب الإدارة.\nالحاضرون: أحمد، سارة، ليان.\nيرجى إحضار النسخة المعدّلة من العقد."
+        : "RECHNUNG Nr. 2026-0417\nLiefertermin: Dienstag, 10. November 2026\nBetrag: 1.280,00 € inkl. MwSt.\nBitte überweisen Sie binnen 14 Tagen.",
+    language: language ?? (path.endsWith("arabic.png") ? "ar" : "auto"),
+  };
+}
+
+// ---------- Screenshot (Fullscreen + Region) ----------
+
+export interface ScreenshotResult {
+  path: string | null;
+  cancelled: boolean;
+  /** Thumbnail data URL so the UI can show the captured image instantly. */
+  thumbnail?: string | null;
+}
+
+/** Takes a fullscreen screenshot of all monitors. Browser: returns mock path. */
+export function screenshotFullscreen(): Promise<ScreenshotResult> {
+  if (isNative) return invoke<ScreenshotResult>("screenshot_fullscreen");
+  return new Promise((r) => setTimeout(() => r({ path: "mock-fullscreen.png", cancelled: false, thumbnail: null }), 300));
+}
+
+/** Opens a region selection overlay. Returns path or cancelled. Browser: returns mock. */
+export function screenshotRegion(): Promise<ScreenshotResult> {
+  if (isNative) return invoke<ScreenshotResult>("screenshot_region");
+  return new Promise((r) => setTimeout(() => r({ path: "mock-region.png", cancelled: false, thumbnail: null }), 300));
+}
+
 // ---------- Updates ----------
 
 /** A found update: version + install (downloads, installs, restarts). */
@@ -546,6 +592,18 @@ export const mockDiscord = (() => {
     },
   };
 })();
+
+// ---------- Installed applications ----------
+
+/** Ask: installed apps (Start menu scan), app launching and music search. */
+export const apps = {
+  /** Cached list of app names (for the assistant's context). */
+  list: isNative ? (): Promise<string[]> => invoke<string[]>("apps_list") : (): Promise<string[]> => Promise.resolve(["Spotify", "Google Chrome", "Discord", "Notepad"]),
+  /** Launch an app by name (fuzzy). Returns the launched app's name. */
+  open: (name: string): Promise<string> => (isNative ? invoke<string>("app_launch", { name }) : Promise.resolve(name)),
+  /** Search a song/artist in the music app (Spotify if open or installed, otherwise YouTube Music). */
+  play: (query: string): Promise<string> => (isNative ? invoke<string>("music_play", { query }) : Promise.resolve("Spotify-Suche")),
+};
 
 // ---------- Overview: volume + Windows focus ----------
 

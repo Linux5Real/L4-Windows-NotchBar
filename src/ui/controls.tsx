@@ -6,8 +6,9 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
+import { nav } from "../notch/nav";
 import { AnimatePresence, motion } from "motion/react";
-import { CaretUpDown, Eye, EyeSlash, type Icon } from "@phosphor-icons/react";
+import { CaretUpDown, Check, Eye, EyeSlash, type Icon } from "@phosphor-icons/react";
 import { popover, springs } from "../design/motion";
 import { t } from "../i18n";
 
@@ -348,16 +349,40 @@ type MenuPos = {
   maxHeight: number;
 };
 
+type SelectOption<T extends string> = { value: T; label: string };
+
 export function Select<T extends string>(props: {
   value: T;
-  options: { value: T; label: string }[];
+  options?: SelectOption<T>[];
+  /** Provider-style sections with a small heading and a separator. */
+  groups?: { label: string; options: SelectOption<T>[] }[];
   onChange: (v: T) => void;
   width?: string;
+  /** Allow a wider menu than the trigger (px), e.g. for grouped model names. */
+  menuWidth?: number;
+  /** Edge of the trigger the menu lines up with. Default left. */
+  menuAlign?: "left" | "right";
+  /** Taller menu for long lists (px). Default 160. */
+  menuMaxHeight?: number;
+  /** Called before the menu opens, e.g. to load its options lazily. */
+  onOpen?: () => void;
+  loading?: boolean;
+  emptyLabel?: string;
+  /** Shown on the trigger when the current value is not in `options` (yet). */
+  fallbackLabel?: string;
+  variant?: "default" | "bare";
+  ariaLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<MenuPos | null>(null);
   const ref = useRef<HTMLDivElement>(null);
   const menu = useRef<HTMLDivElement>(null);
+
+  const options = props.options ?? props.groups?.flatMap((group) => group.options) ?? [];
+  const totalOptions =
+    props.groups?.reduce((count, group) => count + group.options.length, 0) ??
+    options.length;
+  const groupCount = props.groups?.length ?? 0;
 
   const measure = () => {
     const trigger = ref.current?.getBoundingClientRect();
@@ -369,14 +394,23 @@ export function Select<T extends string>(props: {
     const maxY =
       Math.min(bounds?.bottom ?? window.innerHeight, window.innerHeight) -
       MENU_EDGE;
-    const wanted = Math.min(MENU_MAX, props.options.length * MENU_ROW + 8);
+    const rows = props.groups
+      ? props.groups.reduce((count, group) => count + group.options.length + 1, 0) +
+        Math.max(0, props.groups.length - 1)
+      : Math.max(1, options.length);
+    const wanted = Math.min(
+      props.menuMaxHeight ?? MENU_MAX,
+      rows * MENU_ROW + 8,
+    );
     const below = maxY - trigger.bottom - MENU_GAP;
     const above = trigger.top - minY - MENU_GAP;
     const up = below < wanted && above > below;
     const room = up ? above : below;
+    const width = Math.max(trigger.width, props.menuWidth ?? 0);
     setPos({
-      left: trigger.left,
-      width: trigger.width,
+      left:
+        props.menuAlign === "right" ? trigger.right - width : trigger.left,
+      width,
       up,
       maxHeight: Math.max(MENU_ROW + 8, Math.min(wanted, room)),
       ...(up
@@ -387,7 +421,7 @@ export function Select<T extends string>(props: {
 
   useLayoutEffect(() => {
     if (open) measure();
-  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, totalOptions, groupCount]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!open) return;
@@ -410,15 +444,50 @@ export function Select<T extends string>(props: {
     };
   }, [open]);
 
+  // Close the menu when the active tool changes (tab switch) or on unmount,
+  // so an open list never leaks onto another page.
+  useEffect(() => {
+    const unsub = nav.subscribe(() => setOpen(false));
+    return () => {
+      unsub();
+      setOpen(false);
+    };
+  }, []);
+
   const host = ref.current?.closest("[data-notch-hit]") ?? document.body;
-  const current = props.options.find((o) => o.value === props.value);
+  const current = options.find((o) => o.value === props.value);
+  const bare = props.variant === "bare";
+  const renderOption = (o: SelectOption<T>) => (
+    <button
+      key={o.value}
+      title={o.label}
+      onClick={() => {
+        props.onChange(o.value);
+        setOpen(false);
+      }}
+      className={`flex h-8 w-full min-w-0 items-center gap-2 rounded-[8px] px-2.5 text-left text-footnote transition-colors hover:bg-fill-3 ${
+        o.value === props.value ? "bg-fill-2 text-label" : "text-label-2"
+      }`}
+    >
+      <span className="min-w-0 flex-1 truncate">{o.label}</span>
+      {o.value === props.value && <Check size={12} weight="bold" className="shrink-0 text-label" />}
+    </button>
+  );
   return (
     <div ref={ref} className={`relative ${props.width ?? "w-28"}`}>
       <button
-        onClick={() => setOpen((o) => !o)}
-        className="pressable pressable-fill flex h-7 w-full items-center justify-between gap-1 rounded-[8px] bg-fill-2 px-2 text-footnote text-label"
+        aria-label={props.ariaLabel}
+        onClick={() => {
+          if (!open) props.onOpen?.();
+          setOpen((o) => !o);
+        }}
+        className={
+          bare
+            ? "pressable flex h-6 w-full items-center justify-between gap-1 rounded-[6px] px-1.5 text-caption text-label-3 hover:bg-fill-1 hover:text-label-2"
+            : "pressable pressable-fill flex h-7 w-full items-center justify-between gap-1 rounded-[10px] border border-label-4/15 bg-fill-2 px-2.5 text-footnote text-label shadow-[inset_0_1px_0_rgb(255_255_255/0.04)] hover:bg-fill-3"
+        }
       >
-        <span className="truncate">{current?.label}</span>
+        <span className="truncate">{current?.label ?? props.fallbackLabel}</span>
         <CaretUpDown
           size={11}
           weight="bold"
@@ -430,7 +499,7 @@ export function Select<T extends string>(props: {
           {open && pos && (
             <motion.div
               ref={menu}
-              className="pointer-events-auto fixed z-[60] overflow-y-auto rounded-[10px] bg-elevated p-1 shadow-[0_10px_30px_rgb(0_0_0/0.6)] ring-1 ring-separator [scrollbar-width:none]"
+              className="pointer-events-auto fixed z-[60] overflow-y-auto rounded-[14px] bg-elevated p-1.5 shadow-[0_16px_40px_rgb(0_0_0/0.65)] ring-1 ring-separator [scrollbar-width:none]"
               style={{
                 left: pos.left,
                 width: pos.width,
@@ -454,20 +523,24 @@ export function Select<T extends string>(props: {
                 transition: popover.exit,
               }}
             >
-              {props.options.map((o) => (
-                <button
-                  key={o.value}
-                  onClick={() => {
-                    props.onChange(o.value);
-                    setOpen(false);
-                  }}
-                  className={`flex h-7 w-full items-center rounded-[6px] px-2 text-left text-footnote hover:bg-fill-2 ${
-                    o.value === props.value ? "text-label" : "text-label-2"
-                  }`}
-                >
-                  {o.label}
-                </button>
-              ))}
+              {props.loading || totalOptions === 0 ? (
+                <div className="flex h-7 items-center px-2 text-footnote text-label-3">
+                  {props.emptyLabel ?? (props.loading ? t("Lädt …") : t("Keine Auswahl"))}
+                </div>
+              ) : props.groups && props.groups.length > 0 ? (
+                props.groups.map((group, index) => (
+                  <div key={group.label}>
+                    {index > 0 && <div className="mx-1 my-1 h-px bg-separator" />}
+                    <div className="flex items-center gap-1.5 px-2 pt-1.5 pb-0.5 text-[10px] font-semibold tracking-[0.06em] text-label-3 uppercase">
+                      <span className="size-1.5 rounded-full bg-label-4" />
+                      {group.label}
+                    </div>
+                    {group.options.map(renderOption)}
+                  </div>
+                ))
+              ) : (
+                options.map(renderOption)
+              )}
             </motion.div>
           )}
         </AnimatePresence>,

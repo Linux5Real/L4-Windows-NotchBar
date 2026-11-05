@@ -28,7 +28,13 @@ export function createStore<T>(initial: T, options: { persist?: string } = {}): 
     get: () => state,
     set(next) {
       state = typeof next === "function" ? (next as (prev: T) => T)(state) : next;
-      if (key) localStorage.setItem(key, JSON.stringify(state));
+      if (key) {
+        try {
+          localStorage.setItem(key, JSON.stringify(state));
+        } catch {
+          // Quota exceeded or the value is not serializable: state stays in memory.
+        }
+      }
       listeners.forEach((l) => l());
     },
     subscribe(listener) {

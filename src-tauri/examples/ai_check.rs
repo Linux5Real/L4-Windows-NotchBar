@@ -11,7 +11,7 @@ fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let key = std::env::var("NOTCH_AI_KEY").expect("NOTCH_AI_KEY not set");
     let provider = args[0].clone();
-    let config = ChatConfig { provider: provider.clone(), base_url: Some(args[1].clone()), model: args[2].clone(), effort: args.get(3).cloned() };
+    let config = ChatConfig { provider: provider.clone(), base_url: Some(args[1].clone()), model: args[2].clone(), effort: args.get(3).cloned(), mode: None };
     let messages: Vec<notch_lib::ai::Msg> = serde_json::from_value(serde_json::json!([{ "role": "user", "content": "Antworte in genau einem kurzen Satz: Was ist eine Notch?" }])).unwrap();
 
     let start = Instant::now();

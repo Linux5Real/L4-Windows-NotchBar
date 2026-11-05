@@ -10,7 +10,14 @@ use windows::Win32::Security::Credentials::{
 };
 
 /// Allowed names, so the frontend can't create arbitrary entries.
-const ALLOWED: &[&str] = &["t212.key", "t212.secret", "ai.anthropic", "ai.openai", "ai.openrouter", "ai.custom", "discord.secret", "discord.token"];
+const ALLOWED: &[&str] = &["t212.key", "t212.secret", "ai.anthropic", "ai.openai", "ai.openrouter", "ai.custom", "ai.opencode", "discord.secret", "discord.token"];
+
+/// Overwrite secret bytes before they are dropped (defense in depth; no extra deps).
+fn zero(bytes: &mut [u8]) {
+    for b in bytes.iter_mut() {
+        *b = 0;
+    }
+}
 
 fn target(name: &str) -> Result<HSTRING, String> {
     if !ALLOWED.contains(&name) {
@@ -25,7 +32,15 @@ pub fn read(name: &str) -> Option<String> {
         let mut cred: *mut CREDENTIALW = std::ptr::null_mut();
         CredReadW(&target, CRED_TYPE_GENERIC, None, &mut cred).ok()?;
         let blob = std::slice::from_raw_parts((*cred).CredentialBlob, (*cred).CredentialBlobSize as usize);
-        let value = String::from_utf8(blob.to_vec()).ok();
+        let tmp = blob.to_vec();
+        let value = match String::from_utf8(tmp) {
+            Ok(s) => Some(s),
+            Err(e) => {
+                let mut bytes = e.into_bytes();
+                zero(&mut bytes);
+                None
+            }
+        };
         CredFree(cred as *const _);
         value
     }
@@ -49,7 +64,9 @@ pub fn secret_set(name: String, value: String) -> Result<(), String> {
         Persist: CRED_PERSIST_LOCAL_MACHINE,
         ..Default::default()
     };
-    unsafe { CredWriteW(&cred, 0) }.map_err(|e| e.message())
+    let result = unsafe { CredWriteW(&cred, 0) }.map_err(|e| e.message());
+    zero(&mut blob);
+    result
 }
 
 #[tauri::command]

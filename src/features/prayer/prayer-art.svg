@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#123a2e"/>
+      <stop offset="0.55" stop-color="#082019"/>
+      <stop offset="1" stop-color="#04110d"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.82" r="0.65">
+      <stop offset="0" stop-color="#30d158" stop-opacity="0.38"/>
+      <stop offset="1" stop-color="#30d158" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="stone" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f2fff9"/>
+      <stop offset="1" stop-color="#8fd7b8"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffe6a3"/>
+      <stop offset="1" stop-color="#e9b955"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="96" height="96" fill="url(#bg)"/>
+  <rect width="96" height="96" fill="url(#glow)"/>
+
+  <!-- crescent -->
+  <path d="M69.5 15.5a9.6 9.6 0 1 0 6.9 15.2 8 8 0 1 1-6.9-15.2Z" fill="url(#gold)"/>
+
+  <!-- stars -->
+  <circle cx="24" cy="21" r="1.15" fill="#ffe9ae" opacity="0.9"/>
+  <circle cx="33" cy="14" r="0.8" fill="#ffe9ae" opacity="0.55"/>
+  <circle cx="80" cy="40" r="0.9" fill="#ffe9ae" opacity="0.5"/>
+
+  <!-- minarets -->
+  <g fill="url(#stone)" opacity="0.9">
+    <rect x="20" y="47" width="5" height="27" rx="1.6"/>
+    <rect x="71" y="47" width="5" height="27" rx="1.6"/>
+    <path d="M22.5 41.5 25 45l2.5-3.5L25 39Z"/>
+    <path d="M73.5 41.5 76 45l2.5-3.5L76 39Z"/>
+    <rect x="18.5" y="52" width="8" height="2.4" rx="1.2"/>
+    <rect x="69.5" y="52" width="8" height="2.4" rx="1.2"/>
+  </g>
+
+  <!-- dome + hall -->
+  <g fill="url(#stone)">
+    <path d="M34 60c0-11.6 6.3-20 14-20s14 8.4 14 20Z" opacity="0.96"/>
+    <path d="M47.9 35.5h0.2" stroke="#f2fff9" stroke-width="2.4" stroke-linecap="round"/>
+    <rect x="29" y="59" width="38" height="15" rx="2.2" opacity="0.92"/>
+    <rect x="33" y="72" width="30" height="3.4" rx="1.7" opacity="0.8"/>
+  </g>
+
+  <!-- doorway + windows cut back to the sky -->
+  <path d="M43 74v-7.4a5 5 0 0 1 10 0V74Z" fill="#061712"/>
+  <circle cx="48" cy="61" r="2.1" fill="#ffe6a3" opacity="0.85"/>
+  <circle cx="38" cy="66" r="1.3" fill="#0a1f18" opacity="0.75"/>
+  <circle cx="58" cy="66" r="1.3" fill="#0a1f18" opacity="0.75"/>
+
+  <!-- horizon -->
+  <path d="M14 78.5h68" stroke="#ffe6a3" stroke-width="1.2" stroke-linecap="round" opacity="0.35"/>
+</svg>

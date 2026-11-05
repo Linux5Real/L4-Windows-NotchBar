@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from "motion/react";
 import { springs } from "../../design/motion";
 import { t } from "../../i18n";
+import { notchScaleFactor } from "../../notch/geometry";
 import { settings } from "../../settings/store";
 import { discordState } from "../discord/store";
 import { privacy } from "./store";
@@ -14,13 +15,15 @@ export function PrivacyDots() {
   const enabled = settings.use().privacyDots;
   const p = privacy.use();
   const call = discordState.use().call;
+  // Follow the notch size so the dots stay next to the imagined camera, vertically centered.
+  const f = notchScaleFactor[settings.use().display.scale ?? "m"];
 
   const talk = p.mic || p.camera || (!!call && !call.mute);
   const dots = enabled ? [p.screen && "red", talk && "green"].filter((d): d is string => !!d) : [];
 
   return (
     // A bit right of the imagined camera in the middle, clear both closed and open.
-    <div className="pointer-events-none absolute top-0 left-1/2 ml-[24px] flex h-[30px] items-center gap-[5px]">
+    <div className="pointer-events-none absolute top-0 left-1/2 flex items-center gap-[5px]" style={{ marginLeft: 24 * f, height: 30 * f }}>
       <AnimatePresence>
         {dots.map((color) => (
           <motion.span

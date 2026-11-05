@@ -1,4 +1,5 @@
 pub mod ai;
+mod apps;
 mod audio;
 mod clipboard;
 mod controls;
@@ -7,12 +8,15 @@ mod discord;
 mod display;
 mod documents;
 mod drop;
+mod ocr;
 mod fps;
 mod hit_test;
 mod media;
 mod memory;
 mod mixer;
+mod opencode;
 mod privacy;
+mod screenshot;
 pub mod secrets;
 mod system;
 mod trading;
@@ -33,30 +37,91 @@ use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, SetForeground
 /// AltGr+Space types nothing, so there's no conflict.
 const SHORTCUT_LABEL: &str = "Strg+Alt+Leertaste";
 
+/// Ctrl+Alt+Space: the main notch toggle.
+fn main_shortcut() -> Shortcut {
+    Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::Space)
+}
+
+/// One per-tool hotkey from the settings.
+#[derive(serde::Deserialize)]
+struct ToolShortcut {
+    id: String,
+    accelerator: String,
+}
+
+/// Tool hotkeys as registered: hotkey + tool id (`set_tool_shortcuts` replaces them).
+#[derive(Default)]
+struct ToolShortcuts(Mutex<Vec<(Shortcut, String)>>);
+
+/// Replaces the per-tool hotkeys from the settings. Unparsable or taken
+/// combinations are skipped silently.
+#[tauri::command]
+fn set_tool_shortcuts(shortcuts: Vec<ToolShortcut>, app: AppHandle, state: State<'_, ToolShortcuts>) {
+    let main = main_shortcut();
+    // Take the old registrations out; the lock is never held across OS calls.
+    let old = std::mem::take(&mut *state.0.lock().unwrap());
+    for (shortcut, _) in old {
+        let _ = app.global_shortcut().unregister(shortcut);
+    }
+
+    let mut fresh: Vec<(Shortcut, String)> = Vec::new();
+    for item in shortcuts {
+        let Ok(parsed) = item.accelerator.parse::<Shortcut>() else { continue };
+        // Never shadow the main toggle, and keep the first owner of a combination.
+        if parsed == main || fresh.iter().any(|(s, _)| *s == parsed) {
+            continue;
+        }
+        if app.global_shortcut().register(parsed).is_ok() {
+            fresh.push((parsed, item.id));
+        }
+    }
+    *state.0.lock().unwrap() = fresh;
+}
+
 /// For main.rs: elevated "Unlock FPS" call (see fps::fps_unlock).
 pub fn fps_elevated_unlock(sid: &str) -> i32 {
     fps::elevated_unlock(sid)
 }
 
 pub fn run() {
-    let shortcut = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::Space);
+    let shortcut = main_shortcut();
 
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         // A second launch doesn't open a second notch.
         .plugin(tauri_plugin_single_instance::init(|_, _, _| {}))
         .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, None))
         // Updates: signed installers from GitHub, only on click in the settings.
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        // Prayer arrival as a native Windows toast.
+        .plugin(tauri_plugin_notification::init())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(move |app, pressed, event| {
-                    if pressed == &shortcut && event.state() == ShortcutState::Pressed {
+                    if event.state() != ShortcutState::Pressed {
+                        return;
+                    }
+                    if pressed == &shortcut {
                         let _ = app.emit("notch://shortcut", ());
+                        return;
+                    }
+                    // Tool hotkey: open the notch straight on that tool.
+                    let tool = app
+                        .state::<ToolShortcuts>()
+                        .0
+                        .lock()
+                        .unwrap()
+                        .iter()
+                        .find(|(s, _)| s == pressed)
+                        .map(|(_, id)| id.clone());
+                    if let Some(id) = tool {
+                        let _ = app.emit("notch://open", id);
                     }
                 })
                 .build(),
         )
+        .manage(ToolShortcuts::default())
+        .manage(apps::AppsState::default())
         .manage(hit_test::HitState::default())
         .manage(media::MediaState::default())
         .manage(mixer::MixerState::default())
@@ -65,6 +130,7 @@ pub fn run() {
         .manage(TrayItems::default())
         .manage(audio::AudioState::default())
         .manage(ai::AiState::default())
+        .manage(opencode::OpenCodeState::default())
         .manage(trading::TradingState::default())
         .manage(usage::UsageState::default())
         .manage(system::SystemState::default())
@@ -89,12 +155,23 @@ pub fn run() {
             audio::audio_levels,
             ai::ai_chat,
             ai::ai_cancel,
+            ai::ai_reset,
+            opencode::opencode_models,
+            opencode::opencode_workspace,
+            opencode::opencode_open_workspace,
+            opencode::opencode_set_permission,
             secrets::secret_set,
             secrets::secret_delete,
             secrets::secret_has,
             trading::trading_fetch,
             usage::usage_fetch,
             system::system_stats,
+            apps::apps_list,
+            apps::app_launch,
+            apps::music_play,
+            ocr::ocr_recognize,
+            screenshot::screenshot_fullscreen,
+            screenshot::screenshot_region,
             convert::convert_probe,
             convert::convert_files,
             convert::reveal_file,
@@ -138,6 +215,7 @@ pub fn run() {
             set_language,
             autostart_get,
             autostart_set,
+            set_tool_shortcuts,
         ])
         .setup(move |app| {
             let window = app.get_webview_window("notch").expect("window 'notch' missing");
@@ -158,8 +236,14 @@ pub fn run() {
             build_tray(app)?;
             Ok(())
         })
-        .run(tauri::generate_context!())
+        .build(tauri::generate_context!())
         .expect("failed to start L4-Notchbar");
+
+    app.run(|app_handle, event| {
+        if let tauri::RunEvent::Exit = event {
+            opencode::shutdown(app_handle.state::<opencode::OpenCodeState>().inner());
+        }
+    });
 }
 
 /// Window that was in the foreground before the shortcut opened the notch.

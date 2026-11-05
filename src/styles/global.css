@@ -1,5 +1,12 @@
 @import "tailwindcss";
 @import "@fontsource-variable/inter/opsz.css";
+@import "@fontsource-variable/noto-sans-arabic/wght.css";
+/*
+ * Prayer times only: a more editorial Arabic face than Noto. Two static
+ * weights instead of the whole family keeps the bundle small.
+ */
+@import "@fontsource/ibm-plex-sans-arabic/arabic-400.css";
+@import "@fontsource/ibm-plex-sans-arabic/arabic-600.css";
 @import "./tokens.css";
 
 /* Registered so the accent crossfades on track change instead of jumping. */
@@ -36,6 +43,27 @@ body {
 /* Numbers that change (times, timers, values) must not jump. */
 .tabular {
   font-variant-numeric: tabular-nums;
+}
+
+/*
+ * Arabic script gets its own family: Inter has no Arabic glyphs, and the
+ * loader falls back per script. Kerning/ligatures on; Inter's ss03/cv05 off.
+ */
+.arabic {
+  font-family: "Noto Sans Arabic Variable", "Segoe UI", Tahoma, sans-serif;
+  font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
+  font-optical-sizing: auto;
+  letter-spacing: 0;
+}
+
+/*
+ * Prayer times use IBM Plex Sans Arabic: flatter terminals and a tighter
+ * baseline than Noto, which reads better at row size next to Inter.
+ */
+.prayer-arabic {
+  font-family: "IBM Plex Sans Arabic", "Noto Sans Arabic Variable", "Segoe UI", Tahoma, sans-serif;
+  font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
+  letter-spacing: 0;
 }
 
 /*

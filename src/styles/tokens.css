@@ -28,7 +28,7 @@
   /* Links (Apple's dark mode link color). */
   --color-link: #419cff;
 
-  --font-sans: "Inter Variable", "Segoe UI Variable Text", system-ui, sans-serif;
+  --font-sans: "Inter Variable", "Noto Sans Arabic Variable", "Segoe UI Variable Text", system-ui, sans-serif;
 
   /* Type scale: size / line height / tracking. Tracking gets tighter as size grows. */
   --text-caption: 11px;

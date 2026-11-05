@@ -2,20 +2,8 @@ import { useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Check, Plus, Star, X } from "@phosphor-icons/react";
 import { springs } from "../../design/motion";
-import { createStore } from "../../lib/store";
 import { t } from "../../i18n";
-
-interface Todo {
-  id: string;
-  text: string;
-  done: boolean;
-  starred: boolean;
-}
-
-const todos = createStore<Todo[]>([], { persist: "todos" });
-
-// Flagged on top, done at the bottom, otherwise in input order.
-const order = (t: Todo) => (t.done ? 2 : t.starred ? 0 : 1);
+import { addTodo, patchTodo as patch, removeTodo, todoOrder as order, todos } from "./store";
 
 export function TodosView() {
   const items = todos.use();
@@ -26,11 +14,10 @@ export function TodosView() {
   const add = () => {
     const text = draft.trim();
     if (!text) return;
-    todos.set((l) => [{ id: crypto.randomUUID(), text, done: false, starred: false }, ...l]);
+    addTodo(text);
     setDraft("");
   };
-  const patch = (id: string, p: Partial<Todo>) => todos.set((l) => l.map((t) => (t.id === id ? { ...t, ...p } : t)));
-  const remove = (id: string) => todos.set((l) => l.filter((t) => t.id !== id));
+  const remove = (id: string) => removeTodo(id);
 
   return (
     <div className="flex h-full flex-col px-4 pt-1 pb-1">

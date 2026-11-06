@@ -5,7 +5,7 @@ import { MotionConfig } from "motion/react";
 import "./styles/global.css";
 import { Notch } from "./notch/Notch";
 import { DesktopMock } from "./dev/DesktopMock";
-import { isNative } from "./platform/native";
+import { isNative, setToolShortcuts } from "./platform/native";
 import { startDropListener } from "./platform/drop";
 import { clipboard } from "./platform/clipboard";
 import { settings } from "./settings/store";
@@ -15,11 +15,13 @@ import { startSystemPolling } from "./features/system/store";
 import { startGamingWatch } from "./features/system/gaming";
 import { startDiscord } from "./features/discord/store";
 import { startUpdateWatch } from "./lib/update";
+import { startPrayerAlerts } from "./features/prayer/alerts";
 import { showcase } from "./dev/showcase-data";
 import { startShowcase } from "./dev/showcase";
 
 if (showcase) startShowcase();
 
+startPrayerAlerts();
 startDropListener();
 startFocusMode();
 startSystemPolling();
@@ -38,6 +40,21 @@ const syncDisplay = () => {
 };
 syncDisplay();
 settings.subscribe(syncDisplay);
+
+// Tool hotkeys (Settings → Tools): registered on start and whenever the list changes.
+let lastToolShortcuts = "";
+const syncToolShortcuts = () => {
+  const list = settings
+    .get()
+    .tools.filter((tool) => tool.enabled && tool.shortcut)
+    .map((tool) => ({ id: tool.id, accelerator: tool.shortcut! }));
+  const key = JSON.stringify(list);
+  if (key === lastToolShortcuts) return;
+  lastToolShortcuts = key;
+  void setToolShortcuts(list);
+};
+syncToolShortcuts();
+settings.subscribe(syncToolShortcuts);
 
 // Clipboard history only records what an enabled tool uses (Ask: the latest text).
 let lastClipMode = "";

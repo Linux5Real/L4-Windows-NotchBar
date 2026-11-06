@@ -1,28 +1,44 @@
 import { createStore } from "../lib/store";
 import type { AlarmDuration, AlarmSound } from "../lib/sound";
 
-export type AskProvider = "openrouter" | "openai" | "anthropic" | "custom";
+export type AskProvider = "openrouter" | "openai" | "anthropic" | "custom" | "opencode";
 export type AskEffort = "low" | "medium" | "high" | "xhigh";
+/** OpenCode only: Chat reads at most, Studio can write files and run commands. */
+export type AskMode = "chat" | "studio";
+
+/** Size of the closed notch / line (display setting). */
+export type NotchScale = "s" | "m" | "l" | "xl";
 
 export interface AskProviderConfig {
   model: string;
   effort: AskEffort;
   /** Only for "custom": OpenAI-compatible base, e.g. https://…/v1 */
   baseUrl: string;
+  /** Only for "opencode"; defaults to "chat" in older settings. */
+  mode?: AskMode;
 }
 
 export interface Settings {
   /** Open on hover or only on click. */
   openMode: "hover" | "click";
   hoverDelay: "fast" | "normal" | "patient";
-  /** Order = order in the tool bar. */
-  tools: { id: string; enabled: boolean }[];
+  /** Order = order in the tool bar. `shortcut` = global hotkey opening the notch in that tool. */
+  tools: { id: string; enabled: boolean; shortcut?: string }[];
   trading: { env: "live" | "demo" };
   /** AI usage: which providers are shown (order = display order). */
   usage: { claude: boolean; codex: boolean; gemini: boolean; cursor: boolean };
-  ask: { provider: AskProvider; configs: Record<AskProvider, AskProviderConfig> };
+  ask: { provider: AskProvider; configs: Record<AskProvider, AskProviderConfig>; permission?: "allow" | "ask" | "deny"; /** Persist chat history across restarts. */ saveHistory?: boolean; /** Show the model's reasoning block in replies. */ thinking?: boolean };
   /** `auto` = detected via IP (again on every start); a picked location stays. */
   weather: { name: string; lat: number; lon: number; auto?: boolean } | null;
+  /**
+   * Prayer times: calculation method + Asr shadow rule (madhab). Location follows
+   * `weather`. Alerts fire when a prayer begins: notch banner, Windows toast, adhan.
+   */
+  prayer: {
+    method: "mwl" | "isna" | "egyptian" | "umm_al_qura" | "karachi" | "dubai" | "tehran" | "turkey";
+    madhab: "shafi" | "hanafi";
+    alerts: { notch: boolean; native: boolean; adhan: boolean };
+  };
   /**
    * Display: always on top or hidden in fullscreen; monitor name (null = primary);
    * `offset` = horizontal offset from the center in CSS px (set by dragging).
@@ -33,6 +49,8 @@ export interface Settings {
     offset: number;
     /** Focus mode look: half transparent (as before) or shrunk to a thin line at the edge. */
     focusStyle: "dim" | "line";
+    /** Size of the closed notch and the line; the open panel keeps its tool size. */
+    scale: NotchScale;
     /**
      * Closed look outside focus mode: the notch, or a thin line (no music etc.; only a
      * finished timer opens it into the notch until dismissed). Hover and click work as usual.
@@ -69,9 +87,12 @@ export const TOOL_IDS = [
   "shelf",
   "ask",
   "convert",
+  "translate",
+  "ocr",
   "trading",
   "usage",
   "weather",
+  "prayer",
   "system",
   "discord",
   "vault",
@@ -86,16 +107,21 @@ const defaults: Settings = {
   trading: { env: "live" },
   usage: { claude: true, codex: true, gemini: true, cursor: false },
   ask: {
-    provider: "custom",
+    provider: "opencode",
+    permission: "allow",
+    saveHistory: false,
+    thinking: true,
     configs: {
       openrouter: { model: "", effort: "medium", baseUrl: "" },
       openai: { model: "", effort: "medium", baseUrl: "" },
       anthropic: { model: "claude-opus-5-5", effort: "medium", baseUrl: "" },
       custom: { model: "", effort: "medium", baseUrl: "" },
+      opencode: { model: "opencode/deepseek-v4.1-flash-free", effort: "medium", baseUrl: "", mode: "chat" },
     },
   },
   weather: null,
-  display: { visibility: "always", monitor: null, offset: 0, focusStyle: "dim", idleStyle: "notch" },
+  prayer: { method: "mwl", madhab: "shafi", alerts: { notch: true, native: true, adhan: true } },
+  display: { visibility: "always", monitor: null, offset: 0, focusStyle: "dim", idleStyle: "notch", scale: "m" },
   gaming: { mode: "off" },
   privacyDots: false,
   discord: { clientId: "" },
@@ -152,6 +178,7 @@ settings.set((s) => {
     tools,
     trading: { ...defaults.trading, ...s.trading },
     usage: { ...defaults.usage, ...s.usage },
+    prayer: { ...defaults.prayer, ...s.prayer, alerts: { ...defaults.prayer.alerts, ...s.prayer?.alerts } },
     display: { ...defaults.display, ...s.display },
     gaming: { ...defaults.gaming, ...s.gaming },
     discord: { ...defaults.discord, ...s.discord },
@@ -166,10 +193,32 @@ settings.set((s) => {
 /** Migrates the old shape ({ provider: "demo", model }) and adds missing providers. */
 function migrateAsk(old: Partial<Settings["ask"]> | undefined): Settings["ask"] {
   const known = Object.keys(defaults.ask.configs) as AskProvider[];
-  const provider = old?.provider && known.includes(old.provider) ? old.provider : defaults.ask.provider;
+
+  // An untouched "custom" setup used to be the default. OpenCode now works out
+  // of the box with free models, so move that unconfigured default over.
+  const custom = old?.configs?.custom;
+  const unconfiguredCustom = !custom?.model?.trim() && !custom?.baseUrl?.trim();
+  const fallback = old?.provider === "custom" && unconfiguredCustom ? "opencode" : defaults.ask.provider;
+  const provider = old?.provider && known.includes(old.provider) && !(old.provider === "custom" && unconfiguredCustom)
+    ? old.provider
+    : fallback;
+
   const configs = { ...defaults.ask.configs };
   for (const p of known) configs[p] = { ...defaults.ask.configs[p], ...old?.configs?.[p] };
-  return { provider, configs };
+
+  // Drop the old `opencode-llm-proxy` defaults. Notch now starts OpenCode itself.
+  const opencode = configs.opencode;
+  if (!opencode.baseUrl || /:4010(\/|$)/.test(opencode.baseUrl)) opencode.baseUrl = "";
+  if (!opencode.model || opencode.model === "opencode/big-pickle") {
+    opencode.model = defaults.ask.configs.opencode.model;
+  }
+  // One unified mode now; always studio (full capability).
+  opencode.mode = "studio";
+
+  const permission = (old?.permission === "allow" || old?.permission === "ask" || old?.permission === "deny") ? old.permission : "allow";
+  const saveHistory = typeof old?.saveHistory === "boolean" ? old.saveHistory : false;
+  const thinking = typeof old?.thinking === "boolean" ? old.thinking : true;
+  return { provider, configs, permission, saveHistory, thinking };
 }
 
 export function updateAsk(provider: AskProvider, patch: Partial<AskProviderConfig>) {

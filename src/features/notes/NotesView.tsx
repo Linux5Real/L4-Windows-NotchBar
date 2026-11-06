@@ -1,10 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { content } from "../../design/motion";
-import { createStore } from "../../lib/store";
 import { t } from "../../i18n";
-
-const note = createStore("", { persist: "note" });
+import { note } from "./store";
 
 /** A single note that saves itself, no save button. */
 export function NotesView() {

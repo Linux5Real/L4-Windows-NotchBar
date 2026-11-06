@@ -8,7 +8,7 @@ import { PrivacyDots } from "../features/privacy/PrivacyDots";
 import { FOCUS_CLICKS, focusMode, setFocusMode } from "./focus";
 import { useDragToMove } from "./drag";
 import { LiveSlot, useLiveActivity } from "./live";
-import { DOCK_HEIGHT, HEADER_HEIGHT, geometry, openGeometry, type NotchGeometry } from "./geometry";
+import { DOCK_HEIGHT, HEADER_HEIGHT, openGeometry, useNotchGeometry, type NotchGeometry, type NotchShapes } from "./geometry";
 import { HeaderButton, headerSlot } from "./header";
 import { sizeOverride } from "./size";
 import { NotchShape } from "./NotchShape";
@@ -18,9 +18,10 @@ import { useUnseen } from "../lib/changelog";
 import { nav, navigate } from "./nav";
 import { update } from "../lib/update";
 import { findTab, settingsTab, tabs, type NotchTab } from "./tabs";
-import { holdOpen, pinned, togglePin, useNotchState, type NotchStatus } from "./useNotchState";
+import { holdOpen, openRequests, pinned, togglePin, useNotchState, type NotchStatus } from "./useNotchState";
 import { t } from "../i18n";
 import { timer } from "../features/timer/store";
+import { dismissPrayerAlert, prayerAlert } from "../features/prayer/alerts";
 
 /** If the notch was closed at most this long, it reopens on the last used tool. */
 const RESUME_MS = 60_000;
@@ -34,10 +35,11 @@ export function Notch() {
   // Focus mode as a line: no live activity, no dots, only the thin strip at the edge.
   const line = focus && displaySettings.focusStyle === "line";
   // Line as the normal closed look: hover and click work as usual, but nothing shows
-  // while closed. Only a finished timer opens it into the notch, until dismissed.
+  // while closed. A finished timer or a prayer arrival opens it into the notch until dismissed.
   const timerDone = timer.use().finished;
+  const prayer = prayerAlert.use();
   const idleLine = !focus && displaySettings.idleStyle === "line";
-  const alert = idleLine && timerDone;
+  const alert = idleLine && (timerDone || !!prayer);
   const visible = toolSettings.filter((t) => t.enabled).map((t) => findTab(t.id)).filter((t): t is NotchTab => !!t);
   const { tabId } = nav.use();
   // Hidden tool active (e.g. just disabled) → first visible one.
@@ -68,18 +70,21 @@ export function Notch() {
 
   const override = sizeOverride.use();
   const size = override?.tabId === tab.id ? override : tab.size;
-  // Live activity shown in the closed notch (the idle line only lets the timer alarm through).
-  const shownLive = line ? null : idleLine ? (alert ? "timer" : null) : live.id;
+  // Closed looks follow the size setting ("Klein" … "Extra groß").
+  const geo = useNotchGeometry();
+  // Live activity shown in the closed notch (the idle line only lets the timer alarm and
+  // the prayer banner through).
+  const shownLive = line ? null : idleLine ? (prayer ? "prayer" : timerDone ? "timer" : null) : live.id;
   // The idle line never passes through the small notch: line → slightly bigger line on
   // hover → open, and straight back to the line on close.
   const lineIdle = idleLine && !alert;
   const shape =
     line || (lineIdle && status === "closed")
-      ? geometry.line
+      ? geo.line
       : lineIdle && status === "peek"
-        ? geometry.linePeek
-        : shapeFor(status, shownLive, size);
-  const tightHit = shape === geometry.line || shape === geometry.linePeek;
+        ? geo.linePeek
+        : shapeFor(status, shownLive, size, geo);
+  const tightHit = shape === geo.line || shape === geo.linePeek;
   const sticky = useStickyHitZone(status, size.h);
   const transition = useTransitionFor(status, shape);
 
@@ -114,6 +119,21 @@ export function Notch() {
 
   // Shortcut: opening takes focus (Esc, typing), closing gives it back.
   useEffect(() => onShortcut(() => toggle() === "open" && keyboardFocus(true)), [toggle]);
+
+  // Native notification click: open on the prayer tool (the click handler does the navigation).
+  const openCount = openRequests.use();
+  useEffect(() => {
+    if (openCount === 0) return;
+    open();
+    keyboardFocus(true);
+  }, [openCount, open]);
+
+  // Opening the notch acknowledges the prayer banner. The adhan keeps playing and can
+  // be stopped from the Prayer view.
+  useEffect(() => {
+    if (status === "open" && prayer) dismissPrayerAlert();
+  }, [status, prayer]);
+
   useEffect(
     () =>
       onTrayOpen((tab) => {
@@ -327,13 +347,20 @@ function useStickyHitZone(status: NotchStatus, height: number) {
 /** pb-3 of the hit zone. */
 const HIT_PAD_BOTTOM = 12;
 
-function shapeFor(status: NotchStatus, live: string | null, size: { w: number; h: number }): NotchGeometry {
+function shapeFor(status: NotchStatus, live: string | null, size: { w: number; h: number }, geo: NotchShapes): NotchGeometry {
   if (status === "open") return openGeometry(size.w, size.h);
-  const base = live === "system" ? geometry.gaming : live ? geometry.live : geometry.closed;
+  const base = live === "system" ? geo.gaming : live === "prayer" ? geo.prayer : live ? geo.live : geo.closed;
   if (status === "peek") {
-    // Hover nudge relative to the current width so it also fits the live state.
-    const bump = geometry.peek.w - geometry.closed.w;
-    return { ...geometry.peek, w: base.w + bump };
+    // The prayer banner keeps its size under the cursor: growing the sides would
+    // pull the artwork and the stop button away from the pointer.
+    if (live === "prayer") return base;
+    // Hover nudge relative to the current shape so it also fits the live and prayer states.
+    return {
+      ...base,
+      w: base.w + (geo.peek.w - geo.closed.w),
+      h: base.h + (geo.peek.h - geo.closed.h),
+      r: base.r + (geo.peek.r - geo.closed.r),
+    };
   }
   return base;
 }

@@ -31,6 +31,17 @@ export function holdOpen(on: boolean) {
  */
 export const pinned = createStore(false);
 
+/**
+ * External open requests (a native notification was clicked). The count is the
+ * signal; the Notch component opens on every change. Kept outside the hook so
+ * modules without a notch instance can ask for it.
+ */
+export const openRequests = createStore(0);
+
+export function requestOpen() {
+  openRequests.set((n) => n + 1);
+}
+
 export function togglePin() {
   pinned.set((p) => !p);
 }

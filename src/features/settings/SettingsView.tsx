@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { AnimatePresence, motion, Reorder } from "motion/react";
 import {
   ArrowsInLineHorizontal,
   CheckCircle,
   DotsSixVertical,
+  FolderOpen,
   Keyboard,
   LockSimple,
   Monitor,
@@ -19,17 +21,22 @@ import {
 } from "@phosphor-icons/react";
 import { content, fade, springs } from "../../design/motion";
 import { alarmSounds, playAlarm, stopAlarm, type AlarmDuration } from "../../lib/sound";
-import { nav } from "../../notch/nav";
+import { nav, navigate } from "../../notch/nav";
 import { tabs } from "../../notch/tabs";
+import { isNative } from "../../platform/native";
 import { autostart, display, secrets, unlockFps, type ChangelogEntry, type MonitorInfo, type SecretName, type UsageId } from "../../platform/services";
 import { settings, updateAsk, updateSettings, type AskProvider } from "../../settings/store";
 import { BrandLogo, brandName } from "../../ui/brands";
 import { Button, Group, Row, Segmented, Select, Slider, Switch, TextField } from "../../ui/controls";
 import { effortLevels, providerInfo } from "../ask/providers";
+import { ModelSelect } from "../ask/ModelSelect";
 import { discordState, reconnectDiscord } from "../discord/store";
+import { ShortcutField } from "./ShortcutField";
 import { fps } from "../system/gaming";
 import { PlaceSearch } from "../weather/WeatherView";
 import { VaultSettings } from "../vault/VaultSettings";
+import { METHODS, type PrayerMethodKey, type MadhabKey } from "../prayer/store";
+import { enableNativeNotifications, previewPrayerAlert } from "../prayer/alerts";
 import { detectPlace } from "../weather/store";
 import { focusMode, setFocusMode } from "../../notch/focus";
 import { checkForUpdate, installUpdate, update } from "../../lib/update";
@@ -51,6 +58,7 @@ const pages: { id: PageId; label: string; icon: Icon }[] = [
 /** Deep links from other tools (`navigate("settings", "<section>")`) → page holding that section. */
 const sectionPage: Record<string, PageId> = {
   weather: "general",
+  prayer: "general",
   updates: "general",
   display: "display",
   presentation: "display",
@@ -125,11 +133,13 @@ export function SettingsView() {
               <>
                 <General />
                 <Weather />
+                <Prayer />
                 <Updates />
               </>
             )}
             {page === "display" && (
               <>
+                <NotchLook />
                 <Display />
                 <Presentation />
               </>
@@ -278,6 +288,36 @@ function KeysNote() {
   );
 }
 
+function WorkspaceRow() {
+  const [path, setPath] = useState<string | null>(null);
+  useEffect(() => {
+    if (!isNative) return;
+    void invoke<string>("opencode_workspace").then(setPath).catch(() => {});
+  }, []);
+  return (
+    <Row
+      label={t("Arbeitsordner")}
+      hint={
+        <span className="break-all">
+          {path ?? t("Wird beim ersten Start angelegt.")}
+          <br />
+          {t("Standardordner – Studio schreibt auch an genannte Orte.")}
+        </span>
+      }
+    >
+      <Button
+        icon={FolderOpen}
+        disabled={!isNative}
+        onClick={() => {
+          if (isNative) void invoke("opencode_open_workspace").catch(() => {});
+        }}
+      >
+        {t("Öffnen")}
+      </Button>
+    </Row>
+  );
+}
+
 function Ask() {
   const s = settings.use();
   return (
@@ -291,34 +331,108 @@ function Ask() {
           options={(Object.keys(providerInfo) as AskProvider[]).map((p) => ({ value: p, label: providerInfo[p].label }))}
         />
       </Row>
+      <Row
+        label={t("Modell")}
+        hint={
+          s.ask.provider === "openrouter"
+            ? t("Modell-ID von openrouter.ai/models")
+            : s.ask.provider === "opencode"
+              ? t("Nach Anbieter gruppiert")
+              : undefined
+        }
+      >
+        {s.ask.provider === "opencode" ? (
+          <ModelSelect
+            value={s.ask.configs.opencode.model}
+            onChange={(model) => updateAsk("opencode", { model })}
+            width="w-56"
+            menuAlign="right"
+          />
+        ) : (
+          <TextField
+            value={s.ask.configs[s.ask.provider].model}
+            onChange={(model) => updateAsk(s.ask.provider, { model: model.trim() })}
+            placeholder={t(providerInfo[s.ask.provider].modelHint)}
+            width="w-52"
+          />
+        )}
+      </Row>
+      {s.ask.provider === "opencode" && <WorkspaceRow />}
+      <Row
+        label={t("Denken anzeigen")}
+        hint={t("Kurze Gedanken offen, lange eingeklappt")}
+      >
+        <Switch
+          label={t("Denken anzeigen")}
+          checked={s.ask.thinking ?? true}
+          onChange={(on) => updateSettings((cur) => ({ ask: { ...cur.ask, thinking: on } }))}
+        />
+      </Row>
+      <Row
+        label={t("Chat-Verlauf speichern")}
+        hint={t("Gespeicherte Chats über das Chat-Symbol oben")}
+      >
+        <Switch
+          label={t("Chat-Verlauf speichern")}
+          checked={s.ask.saveHistory ?? false}
+          onChange={(on) => updateSettings((cur) => ({ ask: { ...cur.ask, saveHistory: on } }))}
+        />
+      </Row>
+      {s.ask.provider === "opencode" && (
+        <Row
+          label={t("Berechtigung")}
+          hint={t("Allow = automatisch, Ask = bestätigen, No = verweigern")}
+        >
+          <Segmented
+            id="ask-permission-settings"
+            size="sm"
+            value={s.ask.permission ?? "allow"}
+            onChange={(permission) => {
+              updateSettings((cur) => ({ ask: { ...cur.ask, permission } }));
+              if (isNative) void invoke("opencode_set_permission", { level: permission }).catch(() => {});
+            }}
+            options={[
+              { value: "allow", label: "Allow" },
+              { value: "ask", label: "Ask" },
+              { value: "deny", label: "No" },
+            ]}
+          />
+        </Row>
+      )}
       {s.ask.provider === "custom" && (
         <Row label={t("Base-URL")} hint={t("OpenAI-kompatibel, endet meist auf /v1")}>
           <TextField
-            value={s.ask.configs.custom.baseUrl}
-            onChange={(baseUrl) => updateAsk("custom", { baseUrl: baseUrl.trim() })}
+            value={s.ask.configs[s.ask.provider].baseUrl}
+            onChange={(baseUrl) => updateAsk(s.ask.provider, { baseUrl: baseUrl.trim() })}
             placeholder="https://…/v1"
             width="w-52"
           />
         </Row>
       )}
-      <SecretRow name={`ai.${s.ask.provider}` as SecretName} label={t("API-Schlüssel")} />
-      <Row label={t("Modell")} hint={s.ask.provider === "openrouter" ? t("Modell-ID von openrouter.ai/models") : undefined}>
-        <TextField
-          value={s.ask.configs[s.ask.provider].model}
-          onChange={(model) => updateAsk(s.ask.provider, { model: model.trim() })}
-          placeholder={t(providerInfo[s.ask.provider].modelHint)}
-          width="w-52"
-        />
-      </Row>
-      <Row label="Effort" hint={t("Wie gründlich das Modell nachdenkt")}>
-        <Segmented
-          id="ask-effort-settings"
-          size="sm"
-          value={s.ask.configs[s.ask.provider].effort}
-          onChange={(effort) => updateAsk(s.ask.provider, { effort })}
-          options={effortLevels}
-        />
-      </Row>
+      {s.ask.provider === "opencode" ? (
+        <Row
+          label={t("Verbindung")}
+          hint={t("OpenCode startet automatisch beim ersten Senden. Kein Schlüssel nötig.")}
+        >
+          <span className="text-caption text-label-3">{t("Automatisch")}</span>
+        </Row>
+      ) : (
+        <>
+          <SecretRow
+            name={`ai.${s.ask.provider}` as SecretName}
+            label={t("API-Schlüssel")}
+          />
+          <Row label="Effort" hint={t("Wie gründlich das Modell nachdenkt")}>
+            <Segmented
+              id="ask-effort-settings"
+              size="sm"
+              value={s.ask.configs[s.ask.provider].effort}
+              onChange={(effort) => updateAsk(s.ask.provider, { effort })}
+              options={effortLevels}
+            />
+          </Row>
+        </>
+      )}
     </Group>
   );
 }
@@ -436,6 +550,48 @@ function General() {
   );
 }
 
+/** Closed look: how big the notch or line is and which one shows. */
+function NotchLook() {
+  const d = settings.use().display;
+  return (
+    <Group title={t("Notch")} id="settings-notch">
+      <Row label={t("Größe")} hint={t("Gilt für Notch und Linie – Musik und Timer wachsen mit")}>
+        <Segmented
+          id="notch-size"
+          size="sm"
+          value={d.scale ?? "m"}
+          onChange={(scale) => updateSettings((cur) => ({ display: { ...cur.display, scale } }))}
+          options={[
+            { value: "s", label: t("Klein") },
+            { value: "m", label: t("Normal") },
+            { value: "l", label: t("Groß") },
+            { value: "xl", label: t("Extra groß") },
+          ]}
+        />
+      </Row>
+      <Row
+        label={t("Geschlossen")}
+        hint={
+          d.idleStyle === "line"
+            ? t("Nur eine dünne Linie – Musik und Co. bleiben verborgen, ein abgelaufener Timer klappt trotzdem auf")
+            : t("Die Notch zeigt Musik, Timer und Co.")
+        }
+      >
+        <Segmented
+          id="idle-style"
+          size="sm"
+          value={d.idleStyle}
+          onChange={(idleStyle) => updateSettings((cur) => ({ display: { ...cur.display, idleStyle } }))}
+          options={[
+            { value: "notch", label: t("Notch") },
+            { value: "line", label: t("Linie") },
+          ]}
+        />
+      </Row>
+    </Group>
+  );
+}
+
 /** Where and when the notch shows up. */
 function Display() {
   const s = settings.use();
@@ -481,25 +637,6 @@ function Display() {
           </Button>
         </Row>
       )}
-      <Row
-        label={t("Geschlossen")}
-        hint={
-          d.idleStyle === "line"
-            ? t("Nur eine dünne Linie – Musik und Co. bleiben verborgen, ein abgelaufener Timer klappt trotzdem auf")
-            : t("Die Notch zeigt Musik, Timer und Co.")
-        }
-      >
-        <Segmented
-          id="idle-style"
-          size="sm"
-          value={d.idleStyle}
-          onChange={(idleStyle) => updateSettings((cur) => ({ display: { ...cur.display, idleStyle } }))}
-          options={[
-            { value: "notch", label: t("Notch") },
-            { value: "line", label: t("Linie") },
-          ]}
-        />
-      </Row>
       <Row label={t("Fokus-Modus")} hint={t("Klicks gehen durch. 3× schnell auf die Notch klicken schaltet um – oder im Tray-Menü.")}>
         <Switch label={t("Fokus-Modus")} checked={focus} onChange={setFocusMode} />
       </Row>
@@ -740,6 +877,84 @@ function FpsUnlockRow() {
   );
 }
 
+/** Prayer times: tool on/off + calculation method. Location follows the weather settings. */
+function Prayer() {
+  const s = settings.use();
+  const enabled = s.tools.find((x) => x.id === "prayer")?.enabled ?? false;
+  const setEnabled = (v: boolean) =>
+    updateSettings((cur) => ({ tools: cur.tools.map((x) => (x.id === "prayer" ? { ...x, enabled: v } : x)) }));
+
+  return (
+    <Group title={t("Gebetszeiten")} id="settings-prayer">
+      <Row label={t("Tool anzeigen")}>
+        <Switch
+          label={t("Gebetszeiten")}
+          checked={enabled}
+          onChange={setEnabled}
+        />
+      </Row>
+      <Row label={t("Berechnungsmethode")}>
+        <Select<PrayerMethodKey>
+          width="w-56"
+          value={s.prayer.method}
+          onChange={(method) => updateSettings((cur) => ({ prayer: { ...cur.prayer, method } }))}
+          ariaLabel={t("Berechnungsmethode")}
+          options={METHODS.map((m) => ({ value: m.key, label: t(m.label) }))}
+        />
+      </Row>
+      <Row label={t("Asr (Madhab)")}>
+        <Segmented<MadhabKey>
+          id="prayer-madhab"
+          size="sm"
+          value={s.prayer.madhab}
+          onChange={(madhab) => updateSettings((cur) => ({ prayer: { ...cur.prayer, madhab } }))}
+          options={[
+            { value: "shafi", label: "Shafi'i" },
+            { value: "hanafi", label: "Hanafi" },
+          ]}
+        />
+      </Row>
+      <Row label={t("Ort")} hint={t("Folgt den Wetter-Einstellungen")}>
+        <Button onClick={() => navigate("settings", "weather")}>{s.weather?.name ?? t("Wird erkannt …")}</Button>
+      </Row>
+      <Row
+        label={t("Notch-Hinweis")}
+        hint={t("Zeigt den Gebetsruf im Notch – auch bei der Linien-Form.")}
+      >
+        <Switch
+          label={t("Notch-Hinweis")}
+          checked={s.prayer.alerts.notch}
+          onChange={(notch) =>
+            updateSettings((cur) => ({ prayer: { ...cur.prayer, alerts: { ...cur.prayer.alerts, notch } } }))
+          }
+        />
+      </Row>
+      <Row label={t("Windows-Benachrichtigung")} hint={t("Zusätzlich als Windows-Toast anzeigen.")}>
+        <Switch
+          label={t("Windows-Benachrichtigung")}
+          checked={s.prayer.alerts.native}
+          onChange={(native) => {
+            updateSettings((cur) => ({ prayer: { ...cur.prayer, alerts: { ...cur.prayer.alerts, native } } }));
+            if (native) void enableNativeNotifications();
+          }}
+        />
+      </Row>
+      <Row label={t("Adhan abspielen")} hint={t("Beim Gebetsruf den Adhan abspielen.")}>
+        <Switch
+          label={t("Adhan abspielen")}
+          checked={s.prayer.alerts.adhan}
+          onChange={(adhan) =>
+            updateSettings((cur) => ({ prayer: { ...cur.prayer, alerts: { ...cur.prayer.alerts, adhan } } }))
+          }
+        />
+      </Row>
+      <Row label={t("Vorschau")} hint={t("Zeigt Banner und Adhan sofort.")}>
+        <Button onClick={() => previewPrayerAlert(true)}>{t("Testen")}</Button>
+      </Row>
+    </Group>
+  );
+}
+
 /** Weather location: automatic via IP or fixed, right here without opening the weather tool. */
 function Weather() {
   const { weather: w, units } = settings.use();
@@ -797,6 +1012,18 @@ function Tools() {
   const enabledCount = s.tools.filter((x) => x.enabled).length;
   const [dragging, setDragging] = useState<string | null>(null);
 
+  // Setting one removes the same combination from any other tool.
+  const setToolShortcut = (id: string, shortcut: string | undefined) =>
+    updateSettings((cur) => ({
+      tools: cur.tools.map((tool) =>
+        tool.id === id
+          ? { ...tool, shortcut }
+          : shortcut && tool.shortcut === shortcut
+            ? { ...tool, shortcut: undefined }
+            : tool,
+      ),
+    }));
+
   return (
     <Group>
       <Reorder.Group
@@ -825,7 +1052,8 @@ function Tools() {
               <DotsSixVertical size={13} weight="bold" className="-ml-1 text-label-4 transition-colors group-hover:text-label-3" />
               <tab.icon size={15} weight="bold" className={tool.enabled ? "text-label-2" : "text-label-4"} />
               <span className={`flex-1 text-body select-none ${tool.enabled ? "text-label" : "text-label-3"}`}>{t(tab.label)}</span>
-              <div onPointerDown={(e) => e.stopPropagation()}>
+              <div className="flex items-center gap-1.5" onPointerDown={(e) => e.stopPropagation()}>
+                <ShortcutField value={tool.shortcut} reserved="Ctrl+Alt+Space" onChange={(shortcut) => setToolShortcut(tool.id, shortcut)} />
                 <Switch
                   label={t(tab.label)}
                   checked={tool.enabled}
@@ -839,6 +1067,9 @@ function Tools() {
           );
         })}
       </Reorder.Group>
+      <div className="px-3 pt-1.5 pb-2.5 text-caption text-label-4">
+        {t("Tastenkürzel öffnen die Notch direkt im jeweiligen Tool.")}
+      </div>
     </Group>
   );
 }

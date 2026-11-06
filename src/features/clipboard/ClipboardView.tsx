@@ -25,7 +25,7 @@ import { content, fade, springs } from "../../design/motion";
 import { HeaderActions, HeaderButton } from "../../notch/header";
 import { MAX_SIZE, requestSize } from "../../notch/size";
 import { findTab } from "../../notch/tabs";
-import { clipboard, useClipboard, type ClipItem, type ClipPreview } from "../../platform/clipboard";
+import { clipboard, useClipboard, type ClipItem } from "../../platform/clipboard";
 import { Redacted, Segmented } from "../../ui/controls";
 import { usePresenting } from "../privacy/store";
 import { t } from "../../i18n";
@@ -52,7 +52,9 @@ const PREVIEW_MAX_H = 290;
 /** Gap + row below the image (size, buttons). */
 const PREVIEW_CHROME = 46;
 
-type LoadedPreview = ClipPreview & { w: number; h: number };
+type LoadedPreview =
+  | { kind: "image"; src: string; width: number; height: number; w: number; h: number }
+  | { kind: "text"; text: string };
 
 /**
  * History as a horizontal card row, newest on the left. The wheel scrolls sideways,
@@ -68,7 +70,7 @@ export function ClipboardView() {
   const [previewId, setPreviewId] = useState<number | null>(null);
   const items = filter === "all" ? all : all.filter((i) => i.kind === filter || (filter === "image" && !!i.thumbnail));
   const hidden = usePresenting();
-  const preview = usePreview(hidden ? null : previewId);
+  const preview = usePreview(hidden ? null : previewId, hidden);
 
   // Drop the preview when its entry disappears or the presentation mode starts.
   useEffect(() => {
@@ -142,10 +144,16 @@ export function ClipboardView() {
                 hidden={hidden}
                 copied={copied === item.id}
                 selected={previewId === item.id}
-                onClick={() => (item.thumbnail && !hidden ? setPreviewId((p) => (p === item.id ? null : item.id)) : void copy(item.id))}
+                onClick={() => {
+                  if (hidden) {
+                    void copy(item.id);
+                    return;
+                  }
+                  setPreviewId((p) => (p === item.id ? null : item.id));
+                }}
               />
               <div className="absolute top-2 right-2 flex gap-1 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
-                {item.thumbnail && !hidden && <CardButton label={t("Kopieren")} icon={Copy} onClick={() => void copy(item.id)} />}
+                {!hidden && <CardButton label={t("Kopieren")} icon={Copy} onClick={() => void copy(item.id)} />}
                 <CardButton label={t("Entfernen")} icon={X} onClick={() => clipboard.remove(item.id)} />
               </div>
             </motion.div>
@@ -154,8 +162,11 @@ export function ClipboardView() {
       </div>
 
       <AnimatePresence>
-        {previewId !== null && preview && (
+        {previewId !== null && preview && preview.kind === "image" && (
           <PreviewPane key="preview" preview={preview} onCopy={() => void copy(previewId)} onClose={() => setPreviewId(null)} />
+        )}
+        {previewId !== null && preview && preview.kind === "text" && (
+          <TextPreviewPane key="preview" text={preview.text} onCopy={() => void copy(previewId)} onClose={() => setPreviewId(null)} />
         )}
       </AnimatePresence>
     </div>
@@ -179,7 +190,7 @@ function CardButton({ label, icon: I, onClick }: { label: string; icon: Icon; on
  * Loads the large preview and tells the notch the right height:
  * the image as large as its aspect ratio allows, at most PREVIEW_MAX_H tall.
  */
-function usePreview(id: number | null): LoadedPreview | null {
+function usePreview(id: number | null, hidden: boolean): LoadedPreview | null {
   const [data, setData] = useState<LoadedPreview | null>(null);
   useEffect(() => {
     if (id === null) {
@@ -187,24 +198,34 @@ function usePreview(id: number | null): LoadedPreview | null {
       requestSize("clipboard", null);
       return;
     }
-    let alive = true;
-    void clipboard.preview(id).then((p) => {
-      if (!alive || !p) return;
-      const base = findTab("clipboard")!.size;
-      // As tall as possible without growing past the window.
-      const h = Math.min(PREVIEW_MAX_H, MAX_SIZE.h - base.h - PREVIEW_CHROME, ((base.w - 32) * p.height) / p.width);
-      setData({ ...p, w: (h * p.width) / p.height, h });
-      requestSize("clipboard", { w: base.w, h: base.h + h + PREVIEW_CHROME });
-    });
-    return () => {
-      alive = false;
-    };
-  }, [id]);
+    const item = clipboard.get().find((i) => i.id === id);
+    if (!item) {
+      setData(null);
+      return;
+    }
+    const base = findTab("clipboard")!.size;
+    if (item.thumbnail && !hidden) {
+      let alive = true;
+      void clipboard.preview(id).then((p) => {
+        if (!alive || !p) return;
+        const h = Math.min(PREVIEW_MAX_H, MAX_SIZE.h - base.h - PREVIEW_CHROME, ((base.w - 32) * p.height) / p.width);
+        setData({ kind: "image", src: p.src, width: p.width, height: p.height, w: (h * p.width) / p.height, h });
+        requestSize("clipboard", { w: base.w, h: base.h + h + PREVIEW_CHROME });
+      });
+      return () => {
+        alive = false;
+      };
+    }
+    const lines = item.text.split("\n");
+    const h = Math.min(PREVIEW_MAX_H, Math.max(60, lines.length * 18 + 16));
+    setData({ kind: "text", text: item.text });
+    requestSize("clipboard", { w: base.w, h: base.h + h + PREVIEW_CHROME });
+  }, [id, hidden]);
   useEffect(() => () => requestSize("clipboard", null), []);
   return data;
 }
 
-function PreviewPane({ preview, onCopy, onClose }: { preview: LoadedPreview; onCopy: () => void; onClose: () => void }) {
+function PreviewPane({ preview, onCopy, onClose }: { preview: Extract<LoadedPreview, { kind: "image" }>; onCopy: () => void; onClose: () => void }) {
   return (
     <motion.div
       className="flex min-h-0 flex-1 flex-col items-center gap-1.5 px-4 pt-2.5"
@@ -232,6 +253,44 @@ function PreviewPane({ preview, onCopy, onClose }: { preview: LoadedPreview; onC
           <ArrowsOutSimple size={11} weight="bold" /> {preview.width} × {preview.height}
         </span>
         <div className="flex gap-0.5">
+          <HeaderButton label={t("Kopieren")} onClick={onCopy}>
+            <Copy size={13} weight="bold" />
+          </HeaderButton>
+          <HeaderButton label={t("Vorschau schließen")} onClick={onClose}>
+            <X size={13} weight="bold" />
+          </HeaderButton>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+function TextPreviewPane({ text, onCopy, onClose }: { text: string; onCopy: () => void; onClose: () => void }) {
+  const isUrl = /^https?:\/\//i.test(text.trim());
+  return (
+    <motion.div
+      className="flex min-h-0 flex-1 flex-col gap-1.5 px-4 pt-2.5"
+      initial={{ opacity: 0, filter: "blur(6px)", transform: "translateY(-6px)" }}
+      animate={{ opacity: 1, filter: "blur(0px)", transform: "translateY(0px)", transition: { ...content.enter, delay: 0.08 } }}
+      exit={{ opacity: 0, filter: "blur(4px)", transition: content.exit }}
+    >
+      <div className="min-h-0 flex-1 w-full overflow-y-auto rounded-[12px] bg-fill-1 p-3 text-footnote text-label-2 [overflow-wrap:anywhere] whitespace-pre-wrap [scrollbar-width:none]">
+        {isUrl ? (
+          <a href={text.trim()} target="_blank" rel="noopener noreferrer" className="text-link underline underline-offset-2 break-all">
+            {text.trim()}
+          </a>
+        ) : (
+          text
+        )}
+      </div>
+      <div className="flex w-full items-center justify-between">
+        <span className="tabular text-caption text-label-3">{text.length} {t("Zeichen")}</span>
+        <div className="flex gap-0.5">
+          {isUrl && (
+            <HeaderButton label={t("Öffnen")} onClick={() => window.open(text.trim(), "_blank")}>
+              <LinkSimple size={13} weight="bold" />
+            </HeaderButton>
+          )}
           <HeaderButton label={t("Kopieren")} onClick={onCopy}>
             <Copy size={13} weight="bold" />
           </HeaderButton>

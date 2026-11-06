@@ -4,6 +4,8 @@
 //! - `openrouter`, `openai`, `custom`: OpenAI-compatible `/chat/completions` (SSE).
 //!   Effort as `reasoning_effort` (OpenRouter: `reasoning.effort`).
 //! - `anthropic`: Claude Messages API (SSE), effort as `output_config.effort`.
+//! - `opencode`: a Notch-owned `opencode serve` child process (see `opencode.rs`),
+//!   so the free OpenCode models work without an API key or a proxy plugin.
 //!
 //! The key comes from Credential Manager (`ai.<provider>`) and only leaves Rust in the
 //! Authorization header. Chunks go to the frontend as `ai://delta`; `ai_cancel` stops
@@ -20,7 +22,8 @@ use tauri::{AppHandle, Emitter, State};
 use crate::secrets;
 
 const SYSTEM_PROMPT: &str = "Du bist Ask, ein schneller Assistent in einer kleinen Notch am oberen Bildschirmrand. \
-Antworte knapp und direkt in der Sprache der Frage. Kein Markdown-Overhead: kurze Absätze, Listen nur wenn nötig.";
+Antworte knapp und direkt in der Sprache der Frage. In Arabic, use clear, natural Arabic: write \"نوتش\" for Notch, never \"الشق\"; translate ordinary English words and keep only names, code, paths, and established technical terms in English. \
+Nutze Markdown sparsam: **fett** für Namen, `Code` für Pfade und Befehle, Listen nur wenn nötig. Keine Markdown-Überschriften in kurzen Antworten.";
 
 /// Claude models where the server falls back to a suitable model on refusal
 /// (`fallbacks: "default"`).
@@ -40,6 +43,8 @@ pub struct ChatConfig {
     pub model: String,
     /// low | medium | high | xhigh
     pub effort: Option<String>,
+    /// OpenCode only: `chat` (read-only) or `studio` (files and commands).
+    pub mode: Option<String>,
 }
 
 #[derive(Default)]
@@ -51,13 +56,52 @@ pub struct AiState {
 struct Delta<'a> {
     id: &'a str,
     text: &'a str,
+    /// true = replace the whole content (OpenCode rewrote the message); false = append.
+    replace: bool,
 }
 
 #[tauri::command]
-pub async fn ai_chat(id: String, config: ChatConfig, messages: Vec<Msg>, app: AppHandle, state: State<'_, AiState>) -> Result<(), String> {
+pub async fn ai_chat(
+    id: String,
+    config: ChatConfig,
+    messages: Vec<Msg>,
+    app: AppHandle,
+    state: State<'_, AiState>,
+    opencode: State<'_, crate::opencode::OpenCodeState>,
+) -> Result<(), String> {
+    // OpenCode is a local child process with its own random password; it needs
+    // no key from Credential Manager. All other providers do.
+    if config.provider == "opencode" {
+        let prompt = messages
+            .iter()
+            .rev()
+            .find(|m| m.role == "user")
+            .map(|m| m.content.trim())
+            .unwrap_or_default();
+        if prompt.is_empty() {
+            return Err("Leere Nachricht".into());
+        }
+        let result = crate::opencode::stream_chat(
+            &config.model,
+            config.mode.as_deref().unwrap_or("chat"),
+            prompt,
+            &mut |text: &str, replace: bool| {
+                let _ = app.emit("ai://delta", Delta { id: &id, text, replace });
+            },
+            || state.cancelled.lock().unwrap().contains(&id),
+            opencode.inner(),
+            &mut |text: &str, replace: bool| {
+                let _ = app.emit("ai://reasoning", Delta { id: &id, text, replace });
+            },
+        )
+        .await;
+        state.cancelled.lock().unwrap().remove(&id);
+        return result;
+    }
+
     let key = secrets::read(&format!("ai.{}", config.provider)).ok_or("no-key")?;
     let result = stream_chat(&config, &key, &messages, |text| {
-        let _ = app.emit("ai://delta", Delta { id: &id, text });
+        let _ = app.emit("ai://delta", Delta { id: &id, text, replace: false });
     }, || state.cancelled.lock().unwrap().contains(&id))
     .await;
     state.cancelled.lock().unwrap().remove(&id);
@@ -67,6 +111,14 @@ pub async fn ai_chat(id: String, config: ChatConfig, messages: Vec<Msg>, app: Ap
 #[tauri::command]
 pub fn ai_cancel(id: String, state: State<'_, AiState>) {
     state.cancelled.lock().unwrap().insert(id);
+}
+
+/// Ends the Notch session and stops the OpenCode child process. Called when the
+/// Ask chat is cleared.
+#[tauri::command]
+pub async fn ai_reset(opencode: State<'_, crate::opencode::OpenCodeState>) -> Result<(), String> {
+    crate::opencode::reset(opencode.inner()).await;
+    Ok(())
 }
 
 /// Core without Tauri, so backend tests can use it too.
@@ -90,7 +142,13 @@ pub async fn stream_chat(
         "openrouter" => "https://openrouter.ai/api/v1/chat/completions".to_string(),
         "custom" => {
             let base = config.base_url.as_deref().unwrap_or("").trim().trim_end_matches('/');
-            if !(base.starts_with("https://") || base.starts_with("http://localhost") || base.starts_with("http://127.0.0.1")) {
+            // https everywhere, except plain http for loopback endpoints.
+            let ok = reqwest::Url::parse(base).map(|u| {
+                (u.scheme() == "https")
+                    || (u.scheme() == "http"
+                        && matches!(u.host_str(), Some("localhost" | "127.0.0.1" | "::1")))
+            });
+            if !matches!(ok, Ok(true)) {
                 return Err("Base-URL muss mit https:// beginnen".into());
             }
             format!("{base}/chat/completions")
@@ -127,13 +185,15 @@ pub async fn stream_chat(
         all.extend(messages.iter().map(|m| json!({ "role": m.role, "content": m.content })));
         let mut body = json!({ "model": model, "stream": true, "messages": all });
         if let Some(e) = effort {
-            if config.provider == "openrouter" {
-                body["reasoning"] = json!({ "effort": e });
-            } else {
-                body["reasoning_effort"] = json!(e);
+            match config.provider.as_str() {
+                "openrouter" => body["reasoning"] = json!({ "effort": e }),
+                _ => body["reasoning_effort"] = json!(e),
             }
         }
-        let mut req = client.post(&url).bearer_auth(key);
+        let mut req = client.post(&url);
+        if !key.is_empty() {
+            req = req.bearer_auth(key);
+        }
         if config.provider == "openrouter" {
             req = req.header("X-Title", "Notch");
         }
@@ -147,15 +207,26 @@ pub async fn stream_chat(
         return Err(http_error(status, &text));
     }
 
-    // Read SSE line by line; a chunk can end mid-line.
-    let mut buffer = String::new();
-    while let Some(chunk) = res.chunk().await.map_err(|e| format!("Verbindung abgebrochen: {}", short(&e.to_string())))? {
+    // Read SSE line by line. Multi-byte UTF-8 chars must survive chunk
+    // boundaries: keep raw bytes and decode complete lines only (a 0x0A byte
+    // never occurs inside a multi-byte sequence).
+    let mut buffer: Vec<u8> = Vec::new();
+    loop {
         if cancelled() {
             return Ok(());
         }
-        buffer.push_str(&String::from_utf8_lossy(&chunk));
-        while let Some(pos) = buffer.find('\n') {
-            let line: String = buffer.drain(..=pos).collect();
+        // Cap the wait so the Stop button reacts even when the provider is silent.
+        let chunk = match tokio::time::timeout(Duration::from_millis(250), res.chunk()).await {
+            Ok(chunk) => chunk.map_err(|e| format!("Verbindung abgebrochen: {}", short(&e.to_string())))?,
+            Err(_) => continue,
+        };
+        let Some(chunk) = chunk else {
+            return Ok(());
+        };
+        buffer.extend_from_slice(&chunk);
+        while let Some(pos) = buffer.iter().position(|b| *b == b'\n') {
+            let line_bytes: Vec<u8> = buffer.drain(..=pos).collect();
+            let line = String::from_utf8_lossy(&line_bytes);
             let Some(data) = line.trim().strip_prefix("data:") else { continue };
             let data = data.trim();
             if data == "[DONE]" {
@@ -177,7 +248,6 @@ pub async fn stream_chat(
             }
         }
     }
-    Ok(())
 }
 
 fn http_error(status: u16, body: &str) -> String {

@@ -15,6 +15,20 @@ export function setPinned(pinned: boolean) {
   if (isNative) void invoke("set_pinned", { pinned });
 }
 
+export interface ToolShortcut {
+  id: string;
+  accelerator: string;
+}
+
+/**
+ * Replaces the per-tool hotkeys in the native shell. A failing combination
+ * (another app owns it) is skipped silently.
+ */
+export function setToolShortcuts(shortcuts: ToolShortcut[]): Promise<void> {
+  if (!isNative) return Promise.resolve();
+  return invoke("set_tool_shortcuts", { shortcuts }).then(() => {}).catch(() => {});
+}
+
 /** Cursor over the hit zone; comes from the Rust poll instead of DOM events. */
 export function onNativeHover(handler: (inside: boolean) => void): () => void {
   if (!isNative) return () => {};

@@ -9,9 +9,12 @@ import {
   GearSix,
   SquaresFour,
   MusicNotesSimple,
+  Mosque,
   NotePencil,
+  Scan,
   Sparkle,
   Timer,
+  Translate,
   Tray,
   Vault,
   type Icon,
@@ -27,9 +30,12 @@ import { ClipboardView } from "../features/clipboard/ClipboardView";
 import { ShelfView } from "../features/shelf/ShelfView";
 import { AskView } from "../features/ask/AskView";
 import { ConvertView } from "../features/convert/ConvertView";
+import { TranslateView } from "../features/translate/TranslateView";
+import { OcrView } from "../features/ocr/OcrView";
 import { TradingView } from "../features/trading/TradingView";
 import { UsageView } from "../features/usage/UsageView";
 import { WeatherView } from "../features/weather/WeatherView";
+import { PrayerView } from "../features/prayer/PrayerView";
 import { SystemView } from "../features/system/SystemView";
 import { DiscordView } from "../features/discord/DiscordView";
 import { VaultView } from "../features/vault/VaultView";
@@ -62,9 +68,12 @@ export const tabs: NotchTab[] = [
   { id: "shelf", label: "Ablage", icon: Tray, size: { w: 560, h: 236 }, View: ShelfView },
   { id: "ask", label: "Ask", icon: Sparkle, size: { w: 560, h: 440 }, View: AskView },
   { id: "convert", label: "Converter", icon: ArrowsLeftRight, size: { w: 520, h: 290 }, View: ConvertView },
+  { id: "translate", label: "Übersetzer", icon: Translate, size: { w: 560, h: 320 }, View: TranslateView },
+  { id: "ocr", label: "Text aus Bild", icon: Scan, size: { w: 560, h: 320 }, View: OcrView },
   { id: "trading", label: "Depot", icon: DepotIcon, size: { w: 560, h: 380 }, View: TradingView },
   { id: "usage", label: "AI-Nutzung", icon: Gauge, size: { w: 600, h: 320 }, View: UsageView },
   { id: "weather", label: "Wetter", icon: CloudSun, size: { w: 520, h: 250 }, View: WeatherView },
+  { id: "prayer", label: "Gebetszeiten", icon: Mosque, size: { w: 520, h: 348 }, View: PrayerView },
   { id: "system", label: "Hardware", icon: Cpu, size: { w: 600, h: 248 }, View: SystemView },
   { id: "discord", label: "Discord", icon: DiscordLogo, size: { w: 520, h: 210 }, View: DiscordView },
   { id: "vault", label: "Tresor", icon: Vault, size: { w: 560, h: 324 }, View: VaultView },

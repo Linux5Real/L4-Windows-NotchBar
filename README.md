@@ -22,7 +22,7 @@ https://github.com/user-attachments/assets/0883a7b8-6197-4a75-9c49-da58bf644983
 
 A Dynamic-Island-style notch for Windows. It sits at the top of your screen, stays out of the way until you need it, and opens on hover, click or **Ctrl + Alt + Space**.
 
-Inside: music controls with a live equalizer, a vault for passwords and 2FA codes, live weather, your Discord call, your portfolio, an AI chat (Claude, ChatGPT and more) with your usage limits, clipboard history, a file shelf, a file and unit converter, timers, to-dos and notes, live hardware stats with FPS for games, and privacy dots for mic, camera and screen recording.
+Inside: music controls with a live equalizer, a vault for passwords and 2FA codes, live weather, your Discord call, your portfolio, an AI chat that works out of the box (free built-in models, Claude, ChatGPT and more) with your usage limits, clipboard history, a file shelf, a file and unit converter, timers, to-dos and notes, live hardware stats with FPS for games, and privacy dots for mic, camera and screen recording.
 
 Make it yours: reorder or hide any tool, move the notch, pick the monitor, hide it automatically in fullscreen apps, or triple-click it to fade it out when it's in the way. All of that in a single executable of a few megabytes, with smooth animations throughout.
 
@@ -43,9 +43,10 @@ Make it yours: reorder or hide any tool, move the notch, pick the monitor, hide 
 
 ### Services
 
-- **Ask** is a chat with Claude, ChatGPT, OpenRouter or any OpenAI-compatible endpoint, with streaming and adjustable reasoning effort.
+- **Ask** is a chat that works without a key — the notch runs its own local OpenCode server (loopback only), so free models work out of the box — or bring Claude, ChatGPT, OpenRouter or any OpenAI-compatible endpoint, with streaming and adjustable reasoning effort. The assistant can act for you too: open apps by name, play music, manage notes, to-dos, timers and settings.
 - **AI usage** shows your subscription limits for Claude, ChatGPT, Gemini and Cursor.
 - **Weather** gives current conditions and a 7-day forecast through Open-Meteo. No API key needed.
+- **Translate** turns text between languages — paste it in or forward it from the OCR tool. Free, no account, source language auto-detected.
 - **Portfolio** connects to Trading 212 and shows profit and loss and a history chart, live or in demo mode. The app only reads, it never trades.
 - **Discord** shows your current voice call with speaking members and buttons for mute, deafen and hang up. In the closed Notch, a green equalizer plays while someone talks.
 
@@ -54,6 +55,8 @@ Make it yours: reorder or hide any tool, move the notch, pick the monitor, hide 
 - **Timer** with focus and break presets, custom durations, six alarm sounds and a running countdown in the closed Notch. An expired timer stays visible until you dismiss it.
 - **To-dos** and **notes** live on your machine and need no account.
 - **Converter** handles units, images (PNG, JPG, WebP, ICO, BMP, DDS), documents (PDF, DOCX, TXT, Markdown, HTML), spreadsheets (XLSX, CSV, JSON) and audio or video if ffmpeg is installed.
+- **Text from images** pulls text out of any screenshot or picture — fullscreen or a region, or straight from the clipboard. Windows' own OCR runs fully on your PC; nothing is uploaded.
+- **Prayer times** (optional) — offline-calculated times for your location, a quiet banner and an optional adhan. Off until you enable it.
 
 ## New in 1.1: Vault
 
@@ -108,7 +111,7 @@ Settings are grouped into General, Display, Tools, Timer, AI and Connections. Th
 
 Every integration is optional. Tools you don't connect simply stay out of your way.
 
-**Ask (AI chat).** Under **AI**, choose a provider (Claude, ChatGPT, OpenRouter or a custom endpoint) and paste your API key. For a custom endpoint, enter the base URL (usually ending in `/v1`) and a model ID. The reasoning effort is set there too.
+**Ask (AI chat).** Out of the box, Ask needs nothing: it runs a local OpenCode server and the free models work without an account or key. Or under **AI**, choose a provider (Claude, ChatGPT, OpenRouter or a custom endpoint) and paste your API key. For a custom endpoint, enter the base URL (usually ending in `/v1`) and a model ID. The reasoning effort is set there too. Ask starts in the read-only Chat mode; Studio mode works in its own folder and can write files and run commands, with allow/ask/deny under Settings → AI.
 
 **AI usage.** Nothing to enter. If you are signed in to Claude Code, the Codex CLI, the Gemini CLI or Cursor on this PC, the Notch reads their existing local login and shows your limits.
 

@@ -1,5 +1,48 @@
 [
   {
+    "version": "2.0.0",
+    "date": "2026-11-06",
+    "items": [
+      {
+        "de": "Ask neu: ohne Schlüssel – Notch nutzt einen lokalen OpenCode-Server. Der Assistent kann jetzt auch handeln: Apps öffnen, Musik abspielen, Notizen, Timer und Tabs steuern",
+        "en": "Ask reworked: no API key needed (a local OpenCode server), and the assistant can act now — open apps, play music, run notes, timers and tabs",
+        "highlight": true
+      },
+      {
+        "de": "Neues Werkzeug: Text aus Bildern lesen (OCR, komplett lokal auf deinem PC) – Screenshot oder Zwischenablage, mit einem Klick kopieren",
+        "en": "New tool: read text from images (OCR, fully local) — screenshot or paste, copy with one click"
+      },
+      {
+        "de": "Neuer Übersetzer – kostenlos, ohne Konto, Quelle wird automatisch erkannt",
+        "en": "New translator — free, no account, source language auto-detected"
+      },
+      {
+        "de": "Frage-Modus Studio: der Assistent kann Dateien anlegen und Befehle ausführen (im Notch-Studio-Ordner, abstellbar)",
+        "en": "Studio mode for Ask: the assistant can create files and run commands (in the Notch Studio folder, can be turned off)"
+      },
+      {
+        "de": "Notizen und To-dos bleiben nach einem Neustart erhalten",
+        "en": "Notes and to-dos now survive restarts"
+      },
+      {
+        "de": "Eigene Hotkeys pro Werkzeug – öffnet die Notch direkt im jeweiligen Werkzeug",
+        "en": "A per-tool hotkey — opens the notch in that tool"
+      },
+      {
+        "de": "Notch- und Liniengröße einstellbar (klein bis extra groß)",
+        "en": "Adjustable size for the notch and the line"
+      },
+      {
+        "de": "Zwischenablage: Text-Einträge öffnen sich jetzt in einer Vorschau",
+        "en": "Clipboard: copied text opens in an inline preview"
+      },
+      {
+        "de": "Optional: Gebetszeiten mit Ruf (aus, bis du es aktivierst)",
+        "en": "Optional: prayer times with an adhan (off until you enable it)"
+      }
+    ]
+  },
+  {
     "version": "1.6.0",
     "date": "2026-10-09",
     "items": [
